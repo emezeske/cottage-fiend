@@ -1,0 +1,21 @@
+{
+  "name": "cottage-fiend",
+  "version": "1.0.0",
+  "description": "The Mallen vs. the cottage cheese delivery crew. A multiplayer joke game.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "gen-art": "node scripts/generate-art.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
+}

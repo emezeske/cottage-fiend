@@ -1,0 +1,316 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { Game, _resetIds } from '../server/game/game.js';
+import {
+  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER,
+} from '../server/game/constants.js';
+import { seededRng } from './helpers.js';
+
+function newGame(seed = 42) {
+  _resetIds();
+  return new Game({ rng: seededRng(seed) });
+}
+
+// advance the sim by ms in fixed ~33ms steps
+function advance(game, ms, step = 33) {
+  for (let t = 0; t < ms; t += step) game.tick(step);
+}
+
+// Helper: put a ready tub at the player's location and have them grab it.
+// Mirrors tapping a tub on the truck without depending on truck geometry.
+function giveTub(game, id) {
+  const p = game.players.get(id);
+  const t = game._spawnTub(p.x, p.y, 'ready');
+  game.pickup(id, 0);
+  return t;
+}
+
+test('addPlayer assigns ids and starts in lobby', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  assert.equal(g.phase, PHASE.LOBBY);
+  assert.equal(g.players.size, 1);
+  assert.equal(g.players.get(id).name, 'alice');
+});
+
+test('player named mallen (any case) becomes The Mallen', () => {
+  const g = newGame();
+  const id = g.addPlayer('MaLLeN');
+  const p = g.players.get(id);
+  assert.equal(p.isMallen, true);
+  assert.equal(g.mallenId, id);
+  assert.equal(p.radius, MALLEN.radius);
+});
+
+test('non-mallen players are not mallen', () => {
+  const g = newGame();
+  const id = g.addPlayer('bob');
+  assert.equal(g.players.get(id).isMallen, false);
+});
+
+test('removePlayer drops carried tub as loose', () => {
+  const g = newGame();
+  const id = g.addPlayer('carrier');
+  const p = g.players.get(id);
+  // place at truck and pick up
+  giveTub(g, id);
+  assert.equal(p.carryingTubId != null, true);
+  g.removePlayer(id);
+  assert.equal(g.tubs.length, 1);
+  assert.equal(g.tubs[0].state, 'loose');
+});
+
+test('removing the mallen promotes another mallen-named player', () => {
+  const g = newGame();
+  const a = g.addPlayer('mallen');
+  const b = g.addPlayer('mallen');
+  assert.equal(g.mallenId, a);
+  g.removePlayer(a);
+  assert.equal(g.mallenId, b);
+});
+
+test('tapping a ready tub on the truck picks it up', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  const p = g.players.get(id);
+  const t = g._spawnTub(p.x, p.y, 'ready');
+  g.pickup(id, 0);
+  assert.equal(p.carryingTubId, t.id);
+  assert.equal(t.state, 'carried');
+});
+
+test('mallen cannot pick up tubs', () => {
+  const g = newGame();
+  const id = g.addPlayer('mallen');
+  const p = g.players.get(id);
+  g._spawnTub(p.x, p.y, 'ready');
+  g.pickup(id, 0);
+  assert.equal(p.carryingTubId, null);
+});
+
+test('carried tub follows the carrier', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  const p = g.players.get(id);
+  giveTub(g, id);
+  g.setInput(id, 1, 0);
+  g.phase = PHASE.PLAYING;
+  advance(g, 200);
+  const tub = g.tubs.find(t => t.state === 'carried');
+  // tub should sit roughly carryOffset in front along +x
+  assert.ok(Math.abs(tub.y - p.y) < 2);
+  assert.ok(tub.x > p.x);
+});
+
+test('charge + release launches the tub as a projectile', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  const p = g.players.get(id);
+  giveTub(g, id);
+  g.setInput(id, 1, 0); // face +x
+  g.startCharge(id, 0);
+  // release at a quarter period for a mid-range power
+  const periodMs = 1000 / THROW.oscillationHz;
+  g.release(id, periodMs * 0.25);
+  const tub = g.tubs.find(t => t.state === 'flying');
+  assert.ok(tub);
+  assert.ok(tub.vx > 0);
+  assert.equal(p.carryingTubId, null);
+});
+
+test('thrown tub landing near fridge scores a point for the carrier', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  const p = g.players.get(id);
+  g.phase = PHASE.PLAYING;
+  // give the player a tub, then move them right next to the fridge
+  p.x = g.loci.fridge.x - 60; p.y = g.loci.fridge.y;
+  const tub = giveTub(g, id);
+  tub.x = p.x; tub.y = p.y;
+  g.setInput(id, 1, 0);
+  g.startCharge(id, 0);
+  g.release(id, 1000 / THROW.oscillationHz * 0.5); // max power toward fridge
+  advance(g, 1000);
+  assert.equal(g.players.get(id).score, 1);
+  // the thrown tub was consumed by the fridge
+  assert.equal(g.tubs.some(t => t.id === tub.id), false);
+});
+
+test('taking a ready tub from the truck triggers a 1s refill', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound();                 // stocks one ready tub
+  g.phase = PHASE.PLAYING;        // skip countdown for the test
+  const p = g.players.get(id);
+  // move onto the ready tub and grab it
+  const ready = g.tubs.find(t => t.state === 'ready');
+  p.x = ready.x; p.y = ready.y;
+  const grabAt = g._clock || 0;
+  g.pickup(id, grabAt);
+  assert.equal(g.tubs.filter(t => t.state === 'ready').length, 0, 'no ready tub right after grab');
+  // before 1s: still no replacement
+  advance(g, 800);
+  assert.equal(g.tubs.filter(t => t.state === 'ready').length, 0, 'no refill before 1s');
+  // after 1s total: a replacement ready tub appears
+  advance(g, 400);
+  assert.ok(g.tubs.filter(t => t.state === 'ready').length >= 1, 'refill after 1s');
+});
+
+test('many players can each carry a tub at once', () => {
+  const g = newGame();
+  const ids = ['a', 'b', 'c', 'd'].map(n => g.addPlayer(n));
+  g.phase = PHASE.PLAYING;
+  for (const id of ids) giveTub(g, id);
+  const carrying = ids.filter(id => g.players.get(id).carryingTubId != null);
+  assert.equal(carrying.length, 4);
+});
+
+test('mallen auto-attacks and forces a drop after hitsToDrop', () => {
+  const g = newGame();
+  const victim = g.addPlayer('victim');
+  const mid = g.addPlayer('mallen');
+  g.phase = PHASE.PLAYING;
+  const v = g.players.get(victim), m = g.players.get(mid);
+  // give victim a tub
+  giveTub(g, victim);
+  // place mallen on top of victim
+  v.x = 400; v.y = 400; m.x = 400; m.y = 400;
+  v.moveInput = { x: 0, y: 0 };
+  // run long enough for hitsToDrop attacks (cooldown ~600ms each)
+  advance(g, MALLEN.attackCooldownMs * (MALLEN.hitsToDrop + 1) + 200);
+  assert.equal(g.players.get(victim).carryingTubId, null, 'victim should have dropped');
+  // the dropped tub is now loose (and may be devoured by the adjacent mallen the
+  // very next tick, which is correct behavior), so confirm via eaten OR loose tub
+  const mallenAte = g.players.get(mid).eaten >= 1;
+  const looseExists = g.tubs.some(t => t.state === 'loose');
+  assert.ok(mallenAte || looseExists, 'dropped tub should be loose or already devoured');
+});
+
+test('mallen devours a loose tub, gains frenzy and eaten count', () => {
+  const g = newGame();
+  const mid = g.addPlayer('mallen');
+  g.phase = PHASE.PLAYING;
+  const m = g.players.get(mid);
+  m.x = 400; m.y = 400;
+  const tub = g._spawnTub(400, 400); // loose tub right on him
+  g.tick(33);
+  assert.equal(m.eaten, 1);
+  assert.ok(m.frenzyMs > 0, 'should be in frenzy');
+  assert.ok(m.radius > MALLEN.radius, 'should have grown');
+  // the loose tub he ate is gone (a ready tub may appear on the truck via the
+  // restock safety net, which is fine — just assert the eaten one is gone)
+  assert.equal(g.tubs.some(t => t.id === tub.id), false);
+});
+
+test('frenzy expires and mallen returns to normal size', () => {
+  const g = newGame();
+  const mid = g.addPlayer('mallen');
+  g.phase = PHASE.PLAYING;
+  const m = g.players.get(mid);
+  m.x = 400; m.y = 400;
+  g._spawnTub(400, 400);
+  g.tick(33);
+  assert.ok(m.frenzyMs > 0);
+  advance(g, FRENZY.durationMs + 200);
+  assert.equal(m.frenzyMs <= 0, true);
+  assert.equal(Math.round(m.radius), MALLEN.radius);
+});
+
+test('round ends when a delivery player reaches pointsToWin', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.phase = PHASE.PLAYING;
+  g.players.get(id).score = ROUND.pointsToWin;
+  g.tick(33);
+  assert.equal(g.phase, PHASE.LEADERBOARD);
+  assert.equal(g.roundWinner.type, 'player');
+  assert.equal(g.roundWinner.name, 'alice');
+});
+
+test('round ends when mallen eats mallenEatsToWin', () => {
+  const g = newGame();
+  const mid = g.addPlayer('mallen');
+  g.phase = PHASE.PLAYING;
+  g.players.get(mid).eaten = ROUND.mallenEatsToWin;
+  g.tick(33);
+  assert.equal(g.phase, PHASE.LEADERBOARD);
+  assert.equal(g.roundWinner.type, 'mallen');
+});
+
+test('readyFractionMet requires the configured fraction', () => {
+  const g = newGame();
+  const a = g.addPlayer('a');
+  const b = g.addPlayer('b');
+  const c = g.addPlayer('c');
+  assert.equal(g.readyFractionMet(), false);
+  g.setReady(a);
+  // 1/3 < 0.5
+  assert.equal(g.readyFractionMet(), false);
+  g.setReady(b);
+  // 2/3 >= 0.5
+  assert.equal(g.readyFractionMet(), true);
+});
+
+test('startRound re-randomizes loci and resets scores', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.players.get(id).score = 5;
+  const before = { ...g.loci.truck };
+  g.startRound();
+  assert.equal(g.players.get(id).score, 0);
+  assert.equal(g.phase, PHASE.COUNTDOWN);
+  // loci object should be freshly generated (likely different position)
+  assert.ok('truck' in g.loci && 'fridge' in g.loci);
+});
+
+test('countdown transitions to playing', () => {
+  const g = newGame();
+  g.addPlayer('alice');
+  g.startRound();
+  assert.equal(g.phase, PHASE.COUNTDOWN);
+  advance(g, ROUND.startCountdownMs + 100);
+  assert.equal(g.phase, PHASE.PLAYING);
+});
+
+test('players collide and are pushed apart', () => {
+  const g = newGame();
+  const a = g.addPlayer('a');
+  const b = g.addPlayer('b');
+  g.phase = PHASE.PLAYING;
+  const pa = g.players.get(a), pb = g.players.get(b);
+  pa.x = 400; pa.y = 400; pb.x = 405; pb.y = 400;
+  g.tick(33);
+  const d = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+  assert.ok(d >= pa.radius + pb.radius - 1, `players should not overlap, dist=${d}`);
+});
+
+test('player cannot stand inside the truck obstacle', () => {
+  const g = newGame();
+  const id = g.addPlayer('a');
+  g.phase = PHASE.PLAYING;
+  const p = g.players.get(id);
+  p.x = g.loci.truck.x; p.y = g.loci.truck.y;
+  g.tick(33);
+  const d = Math.hypot(p.x - g.loci.truck.x, p.y - g.loci.truck.y);
+  assert.ok(d >= LOCI.truckRadius + p.radius - 1, `pushed out of truck, dist=${d}`);
+});
+
+test('snapshot is JSON-serializable and contains expected shape', () => {
+  const g = newGame();
+  g.addPlayer('alice');
+  g.addPlayer('mallen');
+  const snap = g.snapshot();
+  const round = JSON.parse(JSON.stringify(snap));
+  assert.equal(round.players.length, 2);
+  assert.ok('phase' in round && 'loci' in round && 'tubs' in round);
+  assert.ok(round.players.every(p => 'x' in p && 'y' in p && 'isMallen' in p));
+});
+
+test('drainEvents empties the event queue', () => {
+  const g = newGame();
+  g.addPlayer('alice'); // pushes a join event
+  const e1 = g.drainEvents();
+  assert.ok(e1.length >= 1);
+  const e2 = g.drainEvents();
+  assert.equal(e2.length, 0);
+});

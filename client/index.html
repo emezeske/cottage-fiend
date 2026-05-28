@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>🧀 COTTAGE FIEND — The Mallen Cometh</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #20301f; font-family: system-ui, sans-serif;
+    touch-action: none; user-select: none;
+  }
+  #wrap { display: flex; align-items: center; justify-content: center; height: 100%; }
+  canvas { background: #3a5a3a; image-rendering: pixelated; touch-action: none; }
+  #overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    background: radial-gradient(circle at 50% 30%, #4a6a8a, #1a2a1a);
+    color: #fff; text-align: center; padding: 24px; z-index: 10;
+  }
+  #overlay h1 { font-size: clamp(28px, 8vw, 64px); margin: 0; color: #ffe14d;
+    text-shadow: 3px 3px 0 #1e1814; }
+  #overlay p { max-width: 520px; line-height: 1.4; opacity: 0.95; }
+  #name {
+    font-size: 22px; padding: 12px 16px; border-radius: 10px; border: 3px solid #1e1814;
+    width: min(320px, 80vw); text-align: center;
+  }
+  button {
+    font-size: 22px; font-weight: 800; padding: 14px 28px; border-radius: 12px;
+    border: 4px solid #1e1814; background: #ffe14d; color: #1e1814; cursor: pointer;
+    box-shadow: 0 4px 0 #1e1814; transition: transform .05s;
+  }
+  button:active { transform: translateY(4px); box-shadow: none; }
+  #goBtn {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    display: none; z-index: 9; background: #7CFC00;
+  }
+  #goBtn:active { transform: translateX(-50%) translateY(4px); }
+  .hint { font-size: 14px; opacity: 0.85; max-width: 460px; }
+  .mallen-note { color: #f6a; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div id="wrap"><canvas id="game" width="1280" height="720"></canvas></div>
+
+  <button id="goBtn">LET'S GO! 🧀</button>
+
+  <div id="overlay">
+    <h1>🧀 COTTAGE FIEND 🧀</h1>
+    <p>Deliver cottage cheese from the truck to the fridge. Tap a tub to grab it,
+       double-tap-and-hold to charge a throw, release at the right moment to land it.
+       First to <b>10 deliveries</b> wins the round. Grab parachuting <b>presents</b>
+       for random power-ups (or curses!).</p>
+    <p class="mallen-note">Name yourself <b>mallen</b> to become THE MALLEN — a giant
+       cottage-cheese fiend who pummels delivery folk, devours dropped tubs, and goes
+       into a frenzy. The Mallen wins by eating 10 tubs.</p>
+    <input id="name" placeholder="your name" maxlength="16" autocomplete="off" />
+    <button id="joinBtn">JOIN THE CURD CHAOS</button>
+    <p class="hint">Drag to move · Tap a tub to pick up · Double-tap + hold to charge,
+       release to throw · <span id="status"></span></p>
+    <p class="hint">Got curds? 🧀 Curd is the word. Lumpy &amp; proud since today.</p>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
