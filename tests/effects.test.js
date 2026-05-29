@@ -102,6 +102,27 @@ test('half speed debuff decreases movement speed', () => {
   assert.equal(g._effectiveSpeed(p), base * EFFECT.halfSpeedMult);
 });
 
+test('slidey (banana) coasts after input stops', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.phase = PHASE.PLAYING;
+  const p = g.players.get(id);
+  p.x = 800; p.y = 800;
+  p.effect = FX.BANANA; p.effectUntilMs = 99999;
+  g.setInput(id, 1, 0);            // drive right to build momentum
+  advance(g, 600);
+  g.setInput(id, 0, 0);            // let go
+  const xAtRelease = p.x;
+  advance(g, 200);                 // should keep sliding for a bit
+  assert.ok(p.x > xAtRelease + 5, 'player keeps gliding after releasing input');
+  // and a normal player stops immediately
+  const id2 = g.addPlayer('bob');
+  const q = g.players.get(id2); q.x = 400; q.y = 400;
+  g.setInput(id2, 1, 0); advance(g, 200); g.setInput(id2, 0, 0);
+  const qx = q.x; advance(g, 200);
+  assert.ok(Math.abs(q.x - qx) < 1, 'normal player stops on a dime');
+});
+
 test('2x points buff doubles a delivery', () => {
   const g = newGame();
   const id = g.addPlayer('alice');
@@ -178,23 +199,23 @@ test('tiny effect shrinks then restores radius', () => {
   assert.equal(Math.round(p.radius), PLAYER.radius, 'radius restored after expiry');
 });
 
-test('curd cannon enlarges the score radius for the next throw', () => {
+test('curd cannon makes the next throw fly far enough to score from range', () => {
   const g = newGame();
   const id = g.addPlayer('a');
   g.phase = PHASE.PLAYING;
   const p = g.players.get(id);
   p.effect = FX.CURD_CANNON; p.effectUntilMs = 99999; p.cannonArmed = true;
-  // stand far from the fridge — beyond normal score radius but within cannon radius
   const fx = g.loci.fridge.x, fy = g.loci.fridge.y;
-  p.x = fx - 200; p.y = fy;
+  p.x = fx - 300; p.y = fy;          // way beyond the normal ~80px score radius
   giveTub(g, id);
   const tub = g.tubs.find(t => t.state === 'carried');
   tub.x = p.x; tub.y = p.y;
   g.setInput(id, 1, 0);
   g.startCharge(id, 0);
-  g.release(id, 1000 / 2.4 * 0.5); // strong throw toward fridge
-  advance(g, 1500);
-  assert.equal(g.players.get(id).score, 1, 'cannon throw should score from range');
+  g.release(id, 333);                // ~peak power at 1.5Hz
+  advance(g, 400);
+  assert.equal(g.players.get(id).score, 1, 'a mega cannon throw reaches the fridge from range');
+  assert.equal(g.players.get(id).cannonArmed, false, 'cannon disarms after the throw');
 });
 
 test('greased hands drops the tub about a second after grabbing', () => {

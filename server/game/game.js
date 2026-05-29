@@ -41,6 +41,7 @@ export class Game {
     const p = {
       id, name,
       x: spawn.x, y: spawn.y,
+      vx: 0, vy: 0,               // velocity (used for the 'slidey'/banana effect)
       dir: { x: 0, y: 1 },        // facing, for throw direction
       moveInput: { x: 0, y: 0 },
       isMallen,
@@ -151,21 +152,26 @@ export class Game {
     const p = this.players.get(id);
     if (!p || !p.charging || p.carryingTubId == null) return;
     const elapsed = nowMs - p.chargeStartMs;
-    const power = chargePower(elapsed, THROW);
+    let power = chargePower(elapsed, THROW);
     const t = this.tubs.find(t => t.id === p.carryingTubId);
     p.charging = false;
     p.carryingTubId = null;
     if (!t) return;
+    // curd cannon: this throw flies ~10x as far, then disarms
+    const cannon = !!p.cannonArmed;
+    if (cannon) {
+      power *= EFFECT.cannonRangeMult;
+      p.cannonArmed = false;
+      if (p.effect === FX.CURD_CANNON) this._clearEffect(p);
+    }
     t.state = 'flying';
     t.carrierId = null;
     t.vx = p.dir.x * power;
     t.vy = p.dir.y * power;
     t.thrownBy = id;                 // the thrower can't instantly re-catch their own throw
     t.thrownGraceUntil = nowMs + 400;
-    // curd cannon: this throw gets an enlarged fridge score radius, then disarms
-    t.cannon = !!p.cannonArmed;
-    if (p.cannonArmed) { p.cannonArmed = false; if (p.effect === FX.CURD_CANNON) this._clearEffect(p); }
-    this.events.push({ type: 'throw', x: p.x, y: p.y, power, cannon: t.cannon });
+    t.cannon = cannon;
+    this.events.push({ type: 'throw', x: p.x, y: p.y, power, cannon });
   }
 
   setReady(id) {
@@ -453,8 +459,17 @@ export class Game {
       // mallen locked during eat animation
       const locked = p.isMallen && now < p.eatingUntilMs;
       if (!locked) {
-        p.x += p.moveInput.x * speed * dt;
-        p.y += p.moveInput.y * speed * dt;
+        const tvx = p.moveInput.x * speed, tvy = p.moveInput.y * speed;
+        if (p.effect === FX.BANANA) {
+          // 'slidey': ease velocity toward input, and coast to a stop on release
+          const k = Math.min(1, EFFECT.bananaAccel * dt);
+          p.vx += (tvx - p.vx) * k;
+          p.vy += (tvy - p.vy) * k;
+        } else {
+          p.vx = tvx; p.vy = tvy;  // normal: instant (kept in sync for a clean handoff into slidey)
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
       }
       const c = clampToArena(p.x, p.y, p.radius, ARENA);
       p.x = c.x; p.y = c.y;
@@ -574,6 +589,7 @@ export class Game {
           t.state = 'loose'; t.carrierId = null;
         }
       } else if (t.state === 'flying') {
+        const ox = t.x, oy = t.y;       // remember the start of this step (for segment scoring)
         t.x += t.vx * dt;
         t.y += t.vy * dt;
         t.vx *= TUB.friction;
@@ -604,10 +620,16 @@ export class Game {
         }
         if (caught) continue;
 
-        // tub reaches the fridge? curd cannon enlarges the effective radius.
-        const dFridge = dist(t.x, t.y, this.loci.fridge.x, this.loci.fridge.y);
-        const scoreR = t.cannon ? LOCI.scoreRadius * EFFECT.cannonScoreMult : LOCI.scoreRadius;
-        if (dFridge < scoreR) {
+        // score if the tub's flight path this step passed within the fridge zone.
+        // Using the whole segment (not just the endpoint) means fast cannon throws
+        // can't tunnel straight past the fridge between ticks.
+        const f = this.loci.fridge;
+        const abx = t.x - ox, aby = t.y - oy;
+        const len2 = abx * abx + aby * aby;
+        let u = len2 > 0 ? ((f.x - ox) * abx + (f.y - oy) * aby) / len2 : 0;
+        u = u < 0 ? 0 : u > 1 ? 1 : u;
+        const cx = ox + abx * u, cy = oy + aby * u;
+        if (Math.hypot(f.x - cx, f.y - cy) < LOCI.scoreRadius) {
           this._scoreDelivery(t);
           t._dead = true;
           continue;
@@ -620,6 +642,7 @@ export class Game {
 
         if (Math.hypot(t.vx, t.vy) < TUB.minSlideSpeed) {
           t.state = 'loose'; t.vx = 0; t.vy = 0;
+          if (this.rng() < 0.5) this.events.push({ type: 'splat', x: t.x, y: t.y }); // leaves a mess where it lands
         }
       }
     }

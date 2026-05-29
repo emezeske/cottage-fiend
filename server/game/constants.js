@@ -65,9 +65,9 @@ export const SAFE_ZONE = {
 };
 
 export const THROW = {
-  minPower: 260,             // px/sec at weakest release
-  maxPower: 820,             // px/sec at strongest release
-  oscillationHz: 2.4,        // full charge cycles per second (fast = hard)
+  minPower: 120,             // px/sec at weakest release (barely travels)
+  maxPower: 1600,            // px/sec at strongest release (~2x the old reach)
+  oscillationHz: 1.5,        // full charge cycles per second (lower = easier to time)
   // power oscillates min->max->min; release timing picks the value
 };
 
@@ -130,11 +130,12 @@ export const EFFECT = {
   explosionKnockback: 480,  // px/sec imparted
   magnetRadius: 260,        // pull loose/ready tubs within this
   magnetPull: 520,          // px/sec toward the player
-  cannonScoreMult: 3.2,     // curd cannon enlarges the fridge score radius
+  cannonRangeMult: 10,      // curd cannon: next throw flies ~10x as far
   pinataCount: 3,           // tubs dropped by tub piñata
   tinyMult: 0.6,            // size multiplier while 'tiny'
   doubleSpeedMult: 2.0,
   halfSpeedMult: 0.5,
+  bananaAccel: 2.2,         // 'slidey': how fast velocity eases toward input (lower = more slippery; also the coast-to-stop rate)
 };
 
 // Effect ids. Server-authoritative unless noted CLIENT (input/render only).
@@ -150,7 +151,7 @@ export const FX = {
   GREASED: 'greased',            // drops carried tub after ~1s
   TINY: 'tiny',
   BLINDNESS: 'blindness',        // CLIENT: screen splatter overlay
-  BANANA: 'banana',              // CLIENT: slidey momentum feel
+  BANANA: 'banana',              // slidey ice-physics movement (server-side momentum)
   SWAP: 'swap',                  // one-shot wildcard
   PINATA: 'pinata',              // one-shot wildcard
 };
@@ -180,4 +181,4 @@ export const WILDCARD_POOL = [
 // One-shot effects (applied instantly, no active duration).
 export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA]);
 // Client-only effects (server still tracks them so the client can read its own).
-export const CLIENT_FX = new Set([FX.BACKWARDS, FX.BLINDNESS, FX.BANANA]);
+export const CLIENT_FX = new Set([FX.BACKWARDS, FX.BLINDNESS]);

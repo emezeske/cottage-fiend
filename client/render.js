@@ -11,7 +11,7 @@ const AD_H = 58; // height of the top ad banner (CSS px); HUD sits below it
 
 const EFFECT_LABELS = {
   double_speed: '⚡2X SPEED', two_x_points: '2X PTS', invincible: '🛡INVINCIBLE',
-  magnet: '🧲MAGNET', curd_cannon: '💥CURD CANNON',
+  magnet: '🧲MAGNET', curd_cannon: '🚀CURD CANNON: MEGA THROW',
   half_speed: '🐌HALF SPEED', backwards: '🔄BACKWARDS', greased: '🧈GREASED',
   tiny: '🔬TINY', blindness: '🫥CURD BLIND', banana: '🍌SLIDEY',
 };
@@ -20,7 +20,25 @@ const BUFF_SET = new Set(['double_speed', 'two_x_points', 'invincible', 'magnet'
 // transient splatters spawned from events, faded over time
 const splats = [];
 export function addSplat(x, y) {
-  splats.push({ x, y, t: 0, life: 700, frame: (Math.random() * 3) | 0 });
+  splats.push({ x, y, t: 0, delay: 0, life: 700, size: 48, frame: (Math.random() * 3) | 0 });
+}
+
+// The Mallen devouring curds: a staggered burst of splats around him, popping in
+// over ~0.7s so it reads as him ravaging the cottage cheese.
+export function addChomp(x, y) {
+  for (let i = 0; i < 12; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 16 + Math.random() * 72;
+    splats.push({
+      x: x + Math.cos(ang) * rad,
+      y: y + Math.sin(ang) * rad,
+      t: 0,
+      delay: Math.random() * 420,           // staggered = animated
+      life: 380 + Math.random() * 300,
+      size: 30 + Math.random() * 42,
+      frame: (Math.random() * 3) | 0,
+    });
+  }
 }
 
 // colorful confetti burst on a successful delivery (world-space, at the fridge)
@@ -162,11 +180,15 @@ export function render(ctx, canvas, state, selfId, charge) {
   for (let i = splats.length - 1; i >= 0; i--) {
     const s = splats[i];
     s.t += 16;
-    const a = Math.max(0, 1 - s.t / s.life);
+    const age = s.t - s.delay;
+    if (age < 0) continue;                                  // staggered: not yet
+    const a = Math.max(0, 1 - age / s.life);
+    const grow = age < 90 ? 0.55 + 0.45 * (age / 90) : 1;   // quick pop-in
+    const sz = s.size * grow;
     ctx.globalAlpha = a;
-    drawSprite(ctx, images[`splat_${s.frame}`], s.x, s.y, 48, 48);
+    drawSprite(ctx, images[`splat_${s.frame}`], s.x, s.y, sz, sz);
     ctx.globalAlpha = 1;
-    if (s.t >= s.life) splats.splice(i, 1);
+    if (age >= s.life) splats.splice(i, 1);
   }
 
   // walk frame: time-based (framerate-independent) and slower than before
@@ -484,13 +506,14 @@ function drawLeaderboard(ctx, W, H, state, selfId) {
     const crown = p.isMallen ? '👑 ' : '';
     ctx.fillText(`${crown}${p.name} — ${sc}${rd}`, W / 2, y, W - 24);
     y += 32;
-    if (y > H - 70) break;
+    if (y > H - 150) break;
   }
 
+  // sits above the fixed LET'S GO button (which occupies the bottom ~80px)
   const ready = state.players.filter((p) => p.ready).length;
   ctx.fillStyle = '#9f9';
   ctx.font = 'bold 20px system-ui, sans-serif';
-  ctx.fillText(`${ready}/${state.players.length} ready — press LET'S GO (need 50%)`, W / 2, H - 36, W - 24);
+  ctx.fillText(`${ready}/${state.players.length} ready — press LET'S GO 👇 (need 50%)`, W / 2, H - 100, W - 24);
 }
 
 let _blindBlobs = null;

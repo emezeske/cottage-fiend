@@ -2,7 +2,7 @@
 
 import { loadAssets } from './assets.js';
 import { initAudio, playEvent } from './audio.js';
-import { render, addSplat, addConfetti, addBam } from './render.js';
+import { render, addSplat, addConfetti, addBam, addChomp } from './render.js';
 import { setupInput } from './input.js';
 import { screenToWorld } from './camera.js';
 
@@ -11,7 +11,7 @@ const MSG = {
   RELEASE: 'release', PUNCH: 'punch', READY: 'ready', WELCOME: 'welcome', STATE: 'state',
 };
 // throw tuning mirrored from server constants for the visual arc only
-const THROW = { minPower: 260, maxPower: 820, oscillationHz: 2.4 };
+const THROW = { minPower: 120, maxPower: 1600, oscillationHz: 1.5 };
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -64,9 +64,10 @@ function connect(name) {
       state = snap;
       for (const e of m.events || []) {
         playEvent(e.type);
-        if (e.type === 'splat' || e.type === 'chomp' || e.type === 'drop' ||
+        if (e.type === 'splat' || e.type === 'drop' ||
             e.type === 'pinata' || e.type === 'presentClaim')
           addSplat(e.x, e.y);
+        if (e.type === 'chomp') addChomp(e.x, e.y);   // ravaging-curds burst
         if (e.type === 'score') addConfetti(e.x, e.y);
         if (e.type === 'bam') addBam(e.x, e.y);
         if (e.type === 'explosion') {
@@ -102,7 +103,6 @@ function me() { return state && state.players.find(p => p.id === selfId); }
 // store the finger's screen position while dragging and re-steer every frame
 // (so a held finger keeps the character moving, and the camera pans to follow).
 let dragPos = null;                 // {x,y} in CSS px, or null when not dragging
-let bananaVec = { x: 0, y: 0 };     // smoothed vector for the slidey 'banana' debuff
 let lastVec = { x: 0, y: 0 };
 let lastSendTs = 0;
 
@@ -116,9 +116,8 @@ function sendInput(x, y) {
 
 function stopMoving() {
   dragPos = null;
-  bananaVec = { x: 0, y: 0 };
   lastVec = { x: 0, y: 0 }; lastSendTs = performance.now();
-  send(MSG.INPUT, { x: 0, y: 0 });
+  send(MSG.INPUT, { x: 0, y: 0 });   // the server coasts to a stop if 'slidey' is active
 }
 
 function steer() {
@@ -130,15 +129,7 @@ function steer() {
   if (len < 12) { sendInput(0, 0); return; } // finger on the character => hold still
   vx /= len; vy /= len;
   if (p.effect === 'backwards') { vx = -vx; vy = -vy; }
-  if (p.effect === 'banana') {
-    bananaVec.x += (vx - bananaVec.x) * 0.06;
-    bananaVec.y += (vy - bananaVec.y) * 0.06;
-    vx = bananaVec.x; vy = bananaVec.y;
-    send(MSG.INPUT, { x: vx, y: vy });   // banana eases every frame
-  } else {
-    bananaVec.x = vx; bananaVec.y = vy;
-    sendInput(vx, vy);
-  }
+  sendInput(vx, vy);
 }
 
 // input wiring: canvas drag steers; pickup is automatic; throwing is the button.
