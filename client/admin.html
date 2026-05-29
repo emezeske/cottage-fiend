@@ -68,6 +68,19 @@
   <span id="forceStatus"></span>
   <p class="sub">Applies to newly claimed presents immediately, for everyone. Persists across RESET.</p>
 
+  <h2>Mallen power</h2>
+  <label for="mallenPower">Difficulty (balance on the fly):</label>
+  <select id="mallenPower">
+    <option value="1">1 — Pushover (much easier)</option>
+    <option value="2">2 — Weaker</option>
+    <option value="3" selected>3 — Default</option>
+    <option value="4">4 — Stronger</option>
+    <option value="5">5 — Nightmare (much harder)</option>
+  </select>
+  <span id="mallenStatus"></span>
+  <p class="sub">Scales his move speed, attack/dash cooldown, dash reach, and devour-stun
+     radius/duration. Applies immediately to the live game. Persists across RESET.</p>
+
   <h2>Server</h2>
   <button id="reset">RESET SERVER STATE</button>
   <span id="status"></span>
@@ -85,6 +98,18 @@
         forceStatus.textContent = await r.text();
       } catch (e) {
         forceStatus.textContent = 'failed: ' + e;
+      }
+    };
+
+    const mallen = document.getElementById('mallenPower');
+    const mallenStatus = document.getElementById('mallenStatus');
+    fetch('/admin/mallen-power').then(r => r.text()).then(v => { if (v) mallen.value = v; }).catch(() => {});
+    mallen.onchange = async () => {
+      try {
+        const r = await fetch('/admin/mallen-power?level=' + encodeURIComponent(mallen.value), { method: 'POST' });
+        mallenStatus.textContent = await r.text();
+      } catch (e) {
+        mallenStatus.textContent = 'failed: ' + e;
       }
     };
 

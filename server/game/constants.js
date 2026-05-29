@@ -37,9 +37,21 @@ export const FRENZY = {
 // When the Mallen devours a tub, everyone nearby is stunned: frozen + drops their
 // tub for a couple seconds. Invincible players resist.
 export const STUN = {
-  radius: 340,               // wide shockwave radius
-  durationMs: 2000,
+  radius: 240,               // shockwave radius at default power (scaled by MALLEN_POWER)
+  durationMs: 2000,          // freeze length at default power (scaled by MALLEN_POWER)
 };
+
+// Live-tunable Mallen difficulty (admin dashboard). Level 3 is the default; each
+// preset multiplies his base stats. Higher = harder for the delivery crew.
+// Frenzy multipliers stack on top of these (so frenzy auto-scales with power).
+export const MALLEN_POWER = {
+  1: { speed: 0.85, attackCd: 1.45, dash: 0.80, stunRadius: 0.55, stunDur: 0.70 },
+  2: { speed: 0.92, attackCd: 1.20, dash: 0.90, stunRadius: 0.75, stunDur: 0.85 },
+  3: { speed: 1.00, attackCd: 1.00, dash: 1.00, stunRadius: 1.00, stunDur: 1.00 },
+  4: { speed: 1.10, attackCd: 0.80, dash: 1.12, stunRadius: 1.30, stunDur: 1.15 },
+  5: { speed: 1.22, attackCd: 0.62, dash: 1.25, stunRadius: 1.60, stunDur: 1.30 },
+};
+export const MALLEN_POWER_DEFAULT = 3;
 
 // --- Tubs / throwing -------------------------------------------------------
 export const TUB = {

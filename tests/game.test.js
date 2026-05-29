@@ -437,6 +437,21 @@ test('presents roll varied effects within a round', () => {
 
 // Regression: double_speed must speed you up and half_speed slow you down — i.e.
 // the two effects (and the sounds keyed off their ids) are not swapped.
+test('mallen power level scales his speed (and validates 1-5)', () => {
+  const g = newGame();
+  assert.equal(g.mallenPower, 3); // default
+  const id = g.addPlayer('mallen');
+  const m = g.players.get(id);
+  g.setMallenPower(1);
+  const low = g._effectiveSpeed(m);
+  g.setMallenPower(5);
+  const high = g._effectiveSpeed(m);
+  assert.ok(high > low, `level 5 (${high}) should be faster than level 1 (${low})`);
+  g.setMallenPower(99); assert.equal(g.mallenPower, 5);   // invalid ignored
+  g.setMallenPower(0);  assert.equal(g.mallenPower, 5);   // out of range ignored
+  g.setMallenPower(3);  assert.equal(g.mallenPower, 3);
+});
+
 test('golden curd: +1 point (eaten for the Mallen) and a brief freeze (one-shot buff)', () => {
   assert.ok(ONE_SHOT.has(FX.GOLDEN_CURD), 'golden curd is a one-shot');
   assert.ok(BUFF_POOL.some(e => e.fx === FX.GOLDEN_CURD), 'golden curd is a buff');

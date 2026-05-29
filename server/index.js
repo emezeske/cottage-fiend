@@ -33,6 +33,7 @@ const httpServer = http.createServer((req, res) => {
   if (urlPath === '/admin/reset' && req.method === 'POST') { // POST-only so a stray GET can't wipe state
     game = new Game();                       // wipe all state
     game.setForcedPresent(forcedPresent);    // keep the testing override across a reset
+    game.setMallenPower(mallenPower);        // keep the difficulty setting across a reset
     for (const ws of sockets.values()) { try { ws.close(); } catch {} } // kick clients to rejoin fresh
     sockets.clear();
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -54,6 +55,20 @@ const httpServer = http.createServer((req, res) => {
     res.end(forcedPresent);
     return;
   }
+  // live Mallen difficulty knob. POST ?level=1..5; GET returns the current level.
+  if (urlPath === '/admin/mallen-power') {
+    if (req.method === 'POST') {
+      const level = new URL(req.url, 'http://x').searchParams.get('level');
+      game.setMallenPower(level);
+      mallenPower = game.mallenPower;        // validated value, persists across reset
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(`Mallen power set to ${mallenPower}`);
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end(String(mallenPower));
+    return;
+  }
   if (urlPath === '/admin') urlPath = '/admin.html';
   if (urlPath === '/') urlPath = '/index.html';
   const filePath = path.join(CLIENT_DIR, path.normalize(urlPath));
@@ -73,6 +88,7 @@ const httpServer = http.createServer((req, res) => {
 // --- game + websockets ------------------------------------------------------
 let game = new Game();
 let forcedPresent = '';  // admin testing: effect id every present rolls ('' = random)
+let mallenPower = 3;     // admin: live Mallen difficulty level (1-5), persists across reset
 const wss = new WebSocketServer({ server: httpServer });
 const sockets = new Map(); // id -> ws
 

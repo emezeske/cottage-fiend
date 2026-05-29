@@ -7,6 +7,7 @@
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
   PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
+  MALLEN_POWER, MALLEN_POWER_DEFAULT,
 } from './constants.js';
 
 const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SFX
@@ -46,6 +47,7 @@ export class Game {
     this.roundNumber = 0;       // increments each round (for the ROUND N intro)
     this._firstScored = false;  // has anyone scored yet this round (for FIRST CURD)
     this.forcedFx = null;       // admin testing: force every present to this effect (null = random)
+    this.mallenPower = MALLEN_POWER_DEFAULT; // admin: live difficulty knob for the Mallen (1-5)
   }
 
   // Admin/testing: force every claimed present to roll a specific effect, or pass
@@ -53,6 +55,13 @@ export class Game {
   setForcedPresent(fx) {
     this.forcedFx = FX_VALUES.has(fx) ? fx : null;
   }
+
+  // Admin: set the Mallen difficulty level (1-5). Invalid values are ignored.
+  setMallenPower(level) {
+    const n = Math.round(Number(level));
+    if (MALLEN_POWER[n]) this.mallenPower = n;
+  }
+  _mallenPow() { return MALLEN_POWER[this.mallenPower] || MALLEN_POWER[MALLEN_POWER_DEFAULT]; }
 
   // Emit the global FIRST CURD cue the first time anyone scores in a round.
   _maybeFirstCurd() {
@@ -221,9 +230,13 @@ export class Game {
     if (!p) return;
     if (now < p.stunnedUntilMs) return;              // stunned: can't act
     if (p.isMallen && now < p.eatingUntilMs) return; // mid-chomp
-    const cd = p.isMallen
-      ? (p.frenzyMs > 0 ? MALLEN.attackCooldownMs * FRENZY.attackCdMult : MALLEN.attackCooldownMs)
-      : PUNCH.cooldownMs;
+    let cd;
+    if (p.isMallen) {
+      cd = MALLEN.attackCooldownMs * this._mallenPow().attackCd;
+      if (p.frenzyMs > 0) cd *= FRENZY.attackCdMult;
+    } else {
+      cd = PUNCH.cooldownMs;
+    }
     if (now - p.lastAttackMs < cd) return;
     p.lastAttackMs = now;
     // id + facing (for the puncher's whiff poof) + cd (drives the cooldown clock)
@@ -234,12 +247,13 @@ export class Game {
     // lunge will land so the dash actually extends his reach.
     let px = p.x, py = p.y;
     if (p.isMallen) {
-      const dashSpeed = PUNCH.mallenDash / (PUNCH.dashMs / 1000);
+      const dashDist = PUNCH.mallenDash * this._mallenPow().dash;
+      const dashSpeed = dashDist / (PUNCH.dashMs / 1000);
       p.dashVx = p.dir.x * dashSpeed;
       p.dashVy = p.dir.y * dashSpeed;
       p.dashUntilMs = now + PUNCH.dashMs;
-      px = p.x + p.dir.x * PUNCH.mallenDash;
-      py = p.y + p.dir.y * PUNCH.mallenDash;
+      px = p.x + p.dir.x * dashDist;
+      py = p.y + p.dir.y * dashDist;
       this.events.push({ type: 'dash', x: p.x, y: p.y });
     }
 
@@ -572,9 +586,13 @@ export class Game {
   }
 
   _effectiveSpeed(p) {
-    let base = p.isMallen
-      ? (p.frenzyMs > 0 ? MALLEN.speed * FRENZY.speedMult : MALLEN.speed)
-      : PLAYER.speed;
+    let base;
+    if (p.isMallen) {
+      base = MALLEN.speed * this._mallenPow().speed;
+      if (p.frenzyMs > 0) base *= FRENZY.speedMult;
+    } else {
+      base = PLAYER.speed;
+    }
     if (p.effect === FX.DOUBLE_SPEED) base *= EFFECT.doubleSpeedMult;
     else if (p.effect === FX.HALF_SPEED) base *= EFFECT.halfSpeedMult;
     return base;
@@ -757,11 +775,14 @@ export class Game {
   // Mallen devour shockwave: stun every nearby delivery player (freeze + drop
   // their tub) for a couple seconds. Invincible players resist.
   _stunNearby(m, now) {
+    const pw = this._mallenPow();
+    const radius = STUN.radius * pw.stunRadius;
+    const durMs = STUN.durationMs * pw.stunDur;
     let hit = false;
     for (const p of this.players.values()) {
       if (p.isMallen || p.effect === FX.INVINCIBLE) continue;
-      if (dist(m.x, m.y, p.x, p.y) > STUN.radius) continue;
-      p.stunnedUntilMs = now + STUN.durationMs;
+      if (dist(m.x, m.y, p.x, p.y) > radius) continue;
+      p.stunnedUntilMs = now + durMs;
       p.vx = 0; p.vy = 0;
       p.charging = false;
       if (p.carryingTubId != null) {
@@ -769,7 +790,7 @@ export class Game {
         if (t) { t.state = 'loose'; t.carrierId = null; }
         p.carryingTubId = null;
         p.hitsTaken = 0;
-        p.noPickupUntilMs = now + STUN.durationMs; // can't re-grab while stunned
+        p.noPickupUntilMs = now + durMs; // can't re-grab while stunned
         this.events.push({ type: 'drop', x: p.x, y: p.y });
       }
       hit = true;
