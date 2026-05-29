@@ -144,6 +144,30 @@ function clearJsPos(el) {
   el.style.right = ''; el.style.bottom = '';
   el.style.width = ''; el.style.height = '';
 }
+
+// iOS Chrome under-reports innerHeight / 100dvh against the real visible
+// window. Probe 100lvh (largest viewport, the maximum a browser will give us)
+// by laying out a 1px column with that height and measuring it. That value is
+// derived after CSS layout runs, so it matches whatever the browser actually
+// thinks the biggest viewport is — even when innerHeight is wrong.
+const _hProbe = (() => {
+  const el = document.createElement('div');
+  el.style.cssText =
+    'position:fixed;top:0;left:0;width:1px;height:100lvh;' +
+    'visibility:hidden;pointer-events:none;z-index:-1;';
+  document.body.appendChild(el);
+  return el;
+})();
+function maxViewportSize() {
+  const vv = window.visualViewport;
+  // 100lvh probe — fixed positioning + 100lvh resolves to the largest viewport
+  const probedH = _hProbe.getBoundingClientRect().height || 0;
+  return {
+    w: Math.max(window.innerWidth,  document.documentElement.clientWidth,  vv ? vv.width  : 0),
+    h: Math.max(window.innerHeight, document.documentElement.clientHeight, vv ? vv.height : 0, probedH),
+  };
+}
+
 function fitCanvas() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const vv = window.visualViewport;
@@ -154,10 +178,9 @@ function fitCanvas() {
     clearJsPos(canvas);
     for (const id of OVERLAY_IDS) { const el = document.getElementById(id); if (el) clearJsPos(el); }
     clearJsPos(joystick); clearJsPos(actionBtn); clearJsPos(goBtn);
-    // Canvas backing store from the largest viewport signal we have — Safari
-    // iPad sometimes under-reports one of these and leaves a strip uncovered.
-    const w = Math.max(window.innerWidth,  document.documentElement.clientWidth,  vv ? vv.width  : 0);
-    const h = Math.max(window.innerHeight, document.documentElement.clientHeight, vv ? vv.height : 0);
+    // Use the largest viewport signal we can get (including a 100lvh probe).
+    // innerHeight under-reports on iOS Chrome; lvh is the real ceiling.
+    const { w, h } = maxViewportSize();
     canvas.width  = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     canvas.style.width  = w + 'px';     // pin so computeCamera's dpr math works
