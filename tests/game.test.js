@@ -485,6 +485,43 @@ test('golden curd: +1 point (eaten for the Mallen) and a brief freeze (one-shot 
   assert.equal(m.eaten, mEaten + 1); // the Mallen scores via 'eaten'
 });
 
+test('corgi attack spawns a hunter that stuns others but never its owner', () => {
+  assert.ok(ONE_SHOT.has(FX.CORGI_ATTACK), 'corgi attack is a one-shot');
+  assert.ok(BUFF_POOL.some(e => e.fx === FX.CORGI_ATTACK), 'corgi attack is a buff');
+  const g = newGame();
+  const owner = g.addPlayer('owner');
+  const victim = g.addPlayer('victim');
+  g.startRound();
+  advance(g, 3200);
+  const o = g.players.get(owner), v = g.players.get(victim);
+  o.x = 800; o.y = 800; v.x = 880; v.y = 800;
+  g._applyOneShot(o, FX.CORGI_ATTACK, g._clock);
+  assert.equal(g.corgis.length, 1);
+  const c = g.corgis[0];
+  assert.equal(c.ownerId, owner);
+  // park the corgi on the victim — it should charge + run through + stun them
+  c.x = v.x; c.y = v.y;
+  advance(g, 100);
+  assert.ok(g.players.get(victim).stunnedUntilMs > g._clock, 'victim is stunned');
+  assert.ok(c.attacked.has(victim), 'victim recorded as attacked (no repeat)');
+  // it never stuns its owner, even sitting right on top of them
+  c.x = o.x; c.y = o.y; c.targetId = null;
+  const ownerBefore = g.players.get(owner).stunnedUntilMs;
+  advance(g, 200);
+  assert.equal(g.players.get(owner).stunnedUntilMs, ownerBefore, 'owner never attacked');
+});
+
+test('corgi expires after its lifespan', () => {
+  const g = newGame();
+  const id = g.addPlayer('owner');
+  g.startRound();
+  advance(g, 3200);
+  g._applyOneShot(g.players.get(id), FX.CORGI_ATTACK, g._clock);
+  assert.equal(g.corgis.length, 1);
+  advance(g, 8200); // past CORGI.lifeMs (8000)
+  assert.equal(g.corgis.length, 0, 'corgi vanished');
+});
+
 test('setForcedPresent overrides the random roll (admin testing)', () => {
   const g = newGame();
   const id = g.addPlayer('alice');

@@ -7,7 +7,7 @@
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
   PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
-  MALLEN_POWER, MALLEN_POWER_DEFAULT,
+  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI,
 } from './constants.js';
 
 const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SFX
@@ -49,6 +49,8 @@ export class Game {
     this.forcedFx = null;       // admin testing: force every present to this effect (null = random)
     this.mallenPower = MALLEN_POWER_DEFAULT; // admin: live difficulty knob for the Mallen (1-5)
     this.presentRate = 1;       // admin: present-frequency multiplier (1 = normal, higher = more)
+    this.corgis = [];           // active CORGI_ATTACK hunters
+    this._corgiSeq = 1;
   }
 
   // Admin/testing: force every claimed present to roll a specific effect, or pass
@@ -487,7 +489,85 @@ export class Game {
       p.stunnedUntilMs = now + EFFECT.goldenCurdMs;
       p.vx = 0; p.vy = 0;
       p.charging = false;
+    } else if (fx === FX.CORGI_ATTACK) {
+      // spawn a hunter corgi that never attacks its owner (a buff for the spawner)
+      this.corgis.push({
+        id: this._corgiSeq++,
+        x: p.x, y: p.y, vx: 0, vy: 0,
+        ownerId: p.id,
+        targetId: null,
+        attacked: new Set(),
+        expiresAt: now + CORGI.lifeMs,
+        retargetAt: 0,
+        dir: { x: p.dir.x, y: p.dir.y },
+      });
+      this.events.push({ type: 'corgiSpawn', x: p.x, y: p.y });
     }
+  }
+
+  // Freeze one player for durMs (drop their tub too). Invincible players resist.
+  // Returns true if the player was actually stunned.
+  _stunPlayer(p, now, durMs) {
+    if (p.effect === FX.INVINCIBLE) return false;
+    p.stunnedUntilMs = now + durMs;
+    p.vx = 0; p.vy = 0;
+    p.charging = false;
+    if (p.carryingTubId != null) {
+      const t = this.tubs.find((t) => t.id === p.carryingTubId);
+      if (t) { t.state = 'loose'; t.carrierId = null; }
+      p.carryingTubId = null;
+      p.hitsTaken = 0;
+      p.noPickupUntilMs = now + durMs;
+      this.events.push({ type: 'drop', x: p.x, y: p.y });
+    }
+    return true;
+  }
+
+  // The CORGI_ATTACK hunters: wander fast, charge any eligible player in range,
+  // run through them with a stun, then pick a new victim. Never the owner, never
+  // the same person twice. They vanish when their lifespan ends.
+  _updateCorgis(dt, now) {
+    for (const c of this.corgis) {
+      let target = c.targetId != null ? this.players.get(c.targetId) : null;
+      if (target && target.effect === FX.INVINCIBLE) { target = null; c.targetId = null; }
+      if (!target) {
+        let best = null, bestD = Infinity;
+        for (const p of this.players.values()) {
+          if (p.id === c.ownerId || c.attacked.has(p.id) || p.effect === FX.INVINCIBLE) continue;
+          const d = dist(c.x, c.y, p.x, p.y);
+          if (d < CORGI.detectRadius && d < bestD) { best = p; bestD = d; }
+        }
+        if (best) { c.targetId = best.id; target = best; }
+      }
+      if (target) {
+        const dx = target.x - c.x, dy = target.y - c.y;
+        const m = Math.hypot(dx, dy) || 1;
+        c.vx = (dx / m) * CORGI.chargeSpeed;
+        c.vy = (dy / m) * CORGI.chargeSpeed;
+      } else if (now >= c.retargetAt) {
+        const a = this.rng() * Math.PI * 2;
+        c.vx = Math.cos(a) * CORGI.speed;
+        c.vy = Math.sin(a) * CORGI.speed;
+        c.retargetAt = now + CORGI.wanderRetargetMs * (0.6 + this.rng() * 0.8);
+      }
+      c.x += c.vx * dt; c.y += c.vy * dt;
+      if (c.vx || c.vy) c.dir = normalize(c.vx, c.vy);
+      if (c.x < CORGI.radius || c.x > ARENA.width - CORGI.radius) { c.vx = -c.vx; c.retargetAt = 0; }
+      if (c.y < CORGI.radius || c.y > ARENA.height - CORGI.radius) { c.vy = -c.vy; c.retargetAt = 0; }
+      const cc = clampToArena(c.x, c.y, CORGI.radius, ARENA); c.x = cc.x; c.y = cc.y;
+      // contact: run through the victim, stun them, and never hit them again
+      if (target && dist(c.x, c.y, target.x, target.y) < CORGI.touchRadius + target.radius) {
+        this._stunPlayer(target, now, CORGI.stunMs);
+        c.attacked.add(target.id);
+        c.targetId = null;
+        c.retargetAt = 0;
+        this.events.push({ type: 'corgiHit', x: target.x, y: target.y });
+      }
+    }
+    this.corgis = this.corgis.filter((c) => {
+      if (now >= c.expiresAt) { this.events.push({ type: 'corgiGone', x: c.x, y: c.y }); return false; }
+      return true;
+    });
   }
 
   _tickEffects(now) {
@@ -587,6 +667,7 @@ export class Game {
       this._updatePresents(dt, now);
       this._applyMagnets(dt);
       this._mallenLogic(now);
+      this._updateCorgis(dt, now);
       this._checkCarriedDeliveries();
       this._capTubs();
       this._checkRoundEnd();
@@ -788,20 +869,9 @@ export class Game {
     const durMs = STUN.durationMs * pw.stunDur;
     let hit = false;
     for (const p of this.players.values()) {
-      if (p.isMallen || p.effect === FX.INVINCIBLE) continue;
+      if (p.isMallen) continue;
       if (dist(m.x, m.y, p.x, p.y) > radius) continue;
-      p.stunnedUntilMs = now + durMs;
-      p.vx = 0; p.vy = 0;
-      p.charging = false;
-      if (p.carryingTubId != null) {
-        const t = this.tubs.find((t) => t.id === p.carryingTubId);
-        if (t) { t.state = 'loose'; t.carrierId = null; }
-        p.carryingTubId = null;
-        p.hitsTaken = 0;
-        p.noPickupUntilMs = now + durMs; // can't re-grab while stunned
-        this.events.push({ type: 'drop', x: p.x, y: p.y });
-      }
-      hit = true;
+      if (this._stunPlayer(p, now, durMs)) hit = true; // skips invincible
     }
     if (hit) this.events.push({ type: 'stun', x: m.x, y: m.y });
   }
@@ -894,6 +964,7 @@ export class Game {
     this._clock = 0;
     this._truckRefillQueue = [];
     this.presents = [];
+    this.corgis = [];
     this._nextPresentAt = null;
     this._stockTruck();
     this.events.push({ type: 'roundStart', n: this.roundNumber });
@@ -932,6 +1003,9 @@ export class Game {
       })),
       presents: this.presents.map(g => ({
         id: g.id, x: Math.round(g.x), y: Math.round(g.y), landed: g.landed,
+      })),
+      corgis: this.corgis.map(c => ({
+        id: c.id, x: Math.round(c.x), y: Math.round(c.y), dir: c.dir,
       })),
     };
   }

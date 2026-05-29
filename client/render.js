@@ -342,6 +342,7 @@ export function render(ctx, canvas, state, selfId, charge) {
   // walk frame: time-based (framerate-independent) and slower than before
   const animFrame = ((performance.now() / 230) | 0) & 1;
   drawDashTrail(ctx);   // rainbow trail (behind players)
+  drawCorgis(ctx, state);
   for (const p of players) drawPlayer(ctx, p, animFrame, p.id === selfId);
 
   // carried tubs on top of their carriers
@@ -462,6 +463,16 @@ function drawFloor(ctx, arena, bgImg) {
 function dir8(dx, dy) {
   const idx = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8;
   return ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne'][idx];
+}
+
+// CORGI_ATTACK hunters, facing their travel direction
+function drawCorgis(ctx, state) {
+  for (const c of (state && state.corgis) || []) {
+    const d = c.dir ? dir8(c.dir.x, c.dir.y) : 's';
+    const img = images[`corgi_${d}`];
+    if (img) drawSprite(ctx, img, c.x, c.y, 64, 64);
+    else fallbackCircle(ctx, c.x, c.y, 18, '#e8a24d');
+  }
 }
 
 function drawPlayer(ctx, p, frame, isSelf) {

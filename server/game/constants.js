@@ -179,6 +179,21 @@ export const FX = {
   PINATA: 'pinata',              // one-shot wildcard
   INTERSTITIAL: 'interstitial',  // debuff: forced full-screen ad; you're stunned ~3s
   GOLDEN_CURD: 'golden_curd',    // buff: instant +1 point with a big celebration (brief freeze)
+  CORGI_ATTACK: 'corgi_attack',  // buff: spawns a corgi that hunts and stuns everyone else
+};
+
+// The corgi spawned by the CORGI_ATTACK buff: a fast NPC that wanders, charges any
+// player it detects, runs through them and stuns them, then picks a new victim. It
+// never attacks the same person twice or the player who spawned it.
+export const CORGI = {
+  radius: 22,
+  speed: 360,            // px/sec while wandering
+  chargeSpeed: 450,      // px/sec while charging a victim
+  detectRadius: 340,     // start charging an eligible player within this range
+  touchRadius: 40,       // corgi-center -> player-center distance that lands a hit
+  stunMs: 2000,          // victim stun duration
+  lifeMs: 8000,          // lifespan (≈ the buff duration)
+  wanderRetargetMs: 600, // re-randomize the wander heading roughly this often
 };
 
 // Pools with weights. Mallen draws ONLY from buffs (it's his birthday).
@@ -190,6 +205,7 @@ export const BUFF_POOL = [
   { fx: FX.MAGNET,       w: 2 },
   { fx: FX.CURD_CANNON,  w: 2 },
   { fx: FX.GOLDEN_CURD,  w: 2 },
+  { fx: FX.CORGI_ATTACK, w: 2 },
 ];
 export const DEBUFF_POOL = [
   { fx: FX.HALF_SPEED, w: 3 },
@@ -210,6 +226,6 @@ export const WILDCARD_POOL = [
 export const MALLEN_BUFF_POOL = BUFF_POOL.filter((e) => e.fx !== FX.CURD_CANNON);
 
 // One-shot effects (applied instantly, no active duration).
-export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD]);
+export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK]);
 // Client-only effects (server still tracks them so the client can read its own).
 export const CLIENT_FX = new Set([FX.BACKWARDS, FX.BLINDNESS]);

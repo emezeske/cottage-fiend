@@ -33,6 +33,8 @@ for (const d of DIRS)
   }
 // ferrari_{dir} — shown instead of the crew sprite while they have 2X SPEED
 for (const d of DIRS) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.png`;
+// corgi_{dir} — the CORGI_ATTACK hunter
+for (const d of DIRS) MANIFEST[`corgi_${d}`] = `corgi_${d}.png`;
 
 export const images = {};
 
