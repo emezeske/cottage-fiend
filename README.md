@@ -87,7 +87,8 @@ model. (The old `scripts/generate-art.py` procedural baker is legacy/unused.)
 
 Real `.mp3` files in `client/assets/sounds/` (SFX) and `client/assets/music/` (per-
 screen looping music, crossfaded). Everything is preloaded before the JOIN button
-enables. A few incidental events still fall back to in-browser Web Audio synthesis.
+enables; a first-load native `<audio>` tap primes iOS/WebKit before Web Audio starts.
+A few incidental events still fall back to in-browser Web Audio synthesis.
 **`SOUND.md`** documents every sound file and exactly when it triggers — read it
 before recording replacements.
 

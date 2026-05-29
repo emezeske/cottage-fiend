@@ -45,15 +45,17 @@ const musicNodes = {};   // name -> { src, g } currently playing
 let desiredMusic = null;
 
 let ctx = null;
+let clipsLoading = false;
 const buffers = {};
 const sfx = {}; // name -> decoded AudioBuffer
-const rawBytes = {}; // url -> ArrayBuffer, fetched during preload (decoded on join)
+const rawBytes = {}; // url -> ArrayBuffer, fetched during preload (decoded after unlock)
 
 function url_sound(f) { return `assets/sounds/${f}`; }
 function url_music(f) { return `assets/music/${f}`; }
 
 // Fetch every audio file's bytes up front (no AudioContext / user gesture needed).
-// Decoding happens on join, instantly, from these cached bytes. Returns a Promise.
+// Decoding happens after the first user gesture, instantly, from these cached bytes.
+// Returns a Promise.
 export function prefetchAudio() {
   const urls = [
     ...Object.values(FILE_SOUNDS).map(url_sound),
@@ -70,19 +72,21 @@ function loadClip(u) {
   return bytes.then((b) => ctx.decodeAudioData(b));
 }
 
-export function initAudio() {
-  if (ctx) return;
+function ensureContext() {
+  if (ctx) return ctx;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
-  if (ctx.state === 'suspended') ctx.resume(); // we're inside a user gesture (join/ready)
-  // iOS/Safari needs an actual sound played during the unlocking gesture or the
-  // context stays effectively muted for later (async) audio like the music. A
-  // silent one-sample blip fully unlocks it.
-  try {
-    const s = ctx.createBufferSource();
-    s.buffer = ctx.createBuffer(1, 1, 22050);
-    s.connect(ctx.destination);
-    s.start(0);
-  } catch {}
+  return ctx;
+}
+
+function resumeContext() {
+  if (!ctx || ctx.state !== 'suspended' || document.hidden) return;
+  const p = ctx.resume();
+  if (p && typeof p.catch === 'function') p.catch(() => {});
+}
+
+function loadAllClips() {
+  if (clipsLoading) return;
+  clipsLoading = true;
   for (const [evt, file] of Object.entries(FILE_SOUNDS))
     loadClip(url_sound(file)).then((buf) => { buffers[evt] = buf; }).catch(() => {});
   for (const [name, file] of Object.entries(SFX_FILES))
@@ -93,10 +97,16 @@ export function initAudio() {
       .catch((e) => console.warn('music load failed:', file, e));
 }
 
+export function initAudio() {
+  ensureContext();
+  resumeContext();
+  loadAllClips();
+}
+
 // Play a named SFX clip (see SFX_FILES). No-op until loaded.
 export function playSound(name, gain = 0.9) {
   if (!ctx || !sfx[name]) return;
-  if (ctx.state === 'suspended' && !document.hidden) ctx.resume();
+  resumeContext();
   playBuffer(sfx[name], gain);
 }
 
@@ -104,7 +114,7 @@ export function playSound(name, gain = 0.9) {
 const loops = {}; // name -> { src, g }
 export function playLoop(name, gain = 0.5) {
   if (!ctx || !sfx[name] || loops[name]) return;
-  if (ctx.state === 'suspended' && !document.hidden) ctx.resume();
+  resumeContext();
   const src = ctx.createBufferSource();
   src.buffer = sfx[name]; src.loop = true;
   const g = ctx.createGain(); g.gain.value = gain;
@@ -122,12 +132,12 @@ export function stopLoop(name) {
 // Pause/resume the whole audio engine (call when the page is hidden/visible to
 // stop burning CPU on the audio thread while the screen is off).
 export function suspendAudio() { if (ctx && ctx.state === 'running') ctx.suspend(); }
-export function resumeAudio() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
+export function resumeAudio() { resumeContext(); }
 
 // Crossfade the looping background music to `name` (title/gameplay/score).
 export function setMusic(name, fadeMs = 700) {
   if (!ctx || desiredMusic === name) return;
-  if (ctx.state === 'suspended' && !document.hidden) ctx.resume();
+  resumeContext();
   const old = desiredMusic;
   desiredMusic = name;
   if (old && musicNodes[old]) _fadeOutMusic(old, fadeMs);
@@ -252,7 +262,7 @@ const PROCEDURAL = {
 
 export function playEvent(type) {
   if (!ctx) return;
-  if (ctx.state === 'suspended') ctx.resume();
+  resumeContext();
   if (buffers[type]) { playBuffer(buffers[type]); return; }
   const fn = PROCEDURAL[type];
   if (fn) try { fn(); } catch (e) {/* ignore */}

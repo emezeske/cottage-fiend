@@ -20,6 +20,8 @@ const nameInput = document.getElementById('name');
 const joinBtn = document.getElementById('joinBtn');
 const goBtn = document.getElementById('goBtn');
 const actionBtn = document.getElementById('actionBtn');
+const audioUnlockModal = document.getElementById('audioUnlockModal');
+const audioUnlockPlayer = document.getElementById('audioUnlockPlayer');
 
 let ws = null;
 let selfId = null;
@@ -29,6 +31,20 @@ let state = null;
 let prevPos = {};   // last-snapshot positions per player id, to detect movement
 let invLoopOn = false; // is the local invincibility theme looping
 const PREVIEW = new URLSearchParams(location.search).get('preview'); // admin screen preview
+
+function hideAudioUnlockModal() {
+  audioUnlockModal.hidden = true;
+}
+
+audioUnlockModal.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  audioUnlockPlayer.currentTime = 0;
+  const p = audioUnlockPlayer.play();
+  if (p && typeof p.catch === 'function') p.catch(() => {});
+  initAudio();
+  hideAudioUnlockModal();
+}, { once: true });
 
 // A fake snapshot for the /admin preview links — renders a screen with dummy
 // data, no server connection, so it never disturbs a live game.

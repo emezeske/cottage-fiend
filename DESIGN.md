@@ -297,8 +297,9 @@ for incidental events. **SOUND.md** is the authoritative spec — read it before
 recording. Summary:
 
 - **`prefetchAudio()`** fetches all audio bytes up front; the JOIN button is gated
-  until sprites + audio are ready (so the first round is smooth). Clips decode on
-  the join gesture from the cached bytes.
+  until sprites + audio are ready (so the first round is smooth). A first-load
+  native `<audio>` tap primes iOS/WebKit before the Web Audio context starts, then
+  clips decode once from the cached bytes.
 - **Named SFX** (`SFX_FILES`, played via `playSound`): global cues `dash` (distance-
   attenuated from the Mallen), `firstCurd`, `round`; local cues `score`, `ad`, and
   **one per effect** (`double_speed`, `half_speed`, `banana`, `swap`, …) keyed by the
