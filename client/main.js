@@ -160,6 +160,9 @@ function connect(name) {
       // first-curd cue is exclusive with the regular score cue: when the round's
       // first score lands, the scorer hears only the global FIRST CURD sound.
       const firstCurd = (m.events || []).some((e) => e.type === 'firstCurd');
+      // likewise, if this score is what made you dominate, play only DOMINATING
+      // (not the score cue) so they don't muddy each other.
+      const dominatingMe = (m.events || []).some((e) => e.type === 'dominating' && e.id === selfId);
       for (const e of m.events || []) {
         playEvent(e.type);
         if (e.type === 'splat' || e.type === 'drop' ||
@@ -186,7 +189,7 @@ function connect(name) {
         if (e.type === 'firstCurd') playSound('firstCurd');
         if (e.type === 'roundStart') playSound('round');
         // local SFX (only the affected player hears)
-        if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId && !firstCurd) playSound('score');
+        if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId && !firstCurd && !dominatingMe) playSound('score');
         if (e.type === 'dominating' && e.id === selfId) playSound('dominating'); // you're 5+ ahead
         // golden curd: a global celebration — everyone sees the animation and hears it
         if (e.type === 'presentClaim' && e.fx === 'golden_curd') { playSound('golden_curd'); addGoldenCurd(e.id); }
