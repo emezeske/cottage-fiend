@@ -1,34 +1,33 @@
 # Cottage Fiend — Design & Handoff Document
 
-> This document is written to be fed to **Claude Code** (or any developer) to
-> continue the project. It describes the full intended design, what is already
-> built, the network protocol, every tunable, known gaps, and a prioritized
-> backlog. Read this top to bottom before changing code.
+> Read this top to bottom before changing code. It describes the current design,
+> the network protocol, every tunable, the art/audio pipelines, and known gaps.
+> Companion docs: **ART.md** (asset spec) and **SOUND.md** (sound spec).
 
 ---
 
 ## 1. Concept
 
 **Cottage Fiend** — a deliberately silly multiplayer browser game themed entirely
-around cottage cheese. Overhead 2D arena, Streets-of-Rage-ish chunky pixel art.
-It is The Mallen's birthday, hence the birthday leaderboard and the fact that The
-Mallen only ever receives buffs from presents (never debuffs).
+around cottage cheese. Overhead 2D arena with a following camera, Streets-of-Rage-2
+flavored art (gritty, a little cyberpunk). It is The Mallen's birthday, hence the
+birthday leaderboard and the rule that The Mallen only rolls buffs from presents.
 
 - **Delivery players**: carry cottage cheese tubs from a **truck** to a **fridge**.
-  Each tub successfully delivered = 1 point. First to `pointsToWin` (10) ends the round.
-- **The Mallen**: the single player whose name is `mallen` (case-insensitive).
-  A larger, slightly slower cottage-cheese fiend. Auto-attacks nearby delivery
-  players; after `hitsToDrop` (2) hits they drop their carried tub. The Mallen
-  devours loose tubs (animal SFX, messy splatter), and each devour triggers a
-  **frenzy**: +50% size, color flashing, faster movement and attacks for a few
-  seconds. The Mallen wins the round by eating `mallenEatsToWin` (10) tubs.
-- **Presents**: gift-wrapped boxes parachute in periodically and land at a random
-  spot. The first player to walk onto a landed present claims a random power-up or
-  debuff (see §5.5). The Mallen, on its birthday, only ever rolls buffs.
-- **Round flow**: lobby → countdown → playing → leaderboard → (50% press LET'S GO) → next round.
-  The leaderboard shows a birthday cottage-cheese tub with candles and
-  "HAPPY BIRTHDAY MALLEN!".
-- Players can join at any time and spawn into a running round.
+  Each delivery = 1 point. First to `pointsToWin` (10) ends the round.
+- **The Mallen**: the single player named `mallen` (case-insensitive). A bigger
+  fiend, **equal speed** to deliveries (frenzy makes him faster). He **attacks via
+  the same PUNCH/ATTACK button** as everyone (no auto-attack). His attack is a
+  forward **dash/lunge** that plows through the crowd, knocking carried tubs loose.
+  He **devours loose tubs**; each devour triggers a **frenzy** (+50% size, color
+  flash, faster) AND a **shockwave that stuns every nearby player** (they freeze and
+  drop their tub for ~2s). He wins by devouring `mallenEatsToWin` (10) tubs.
+- **Presents**: gift boxes parachute in and land at a random spot. The first player
+  to walk onto a landed present claims a random effect (§5.5). The Mallen only rolls
+  buffs that actually apply to him (never the throw-only curd cannon).
+- **Round flow**: lobby → countdown (ROUND N intro) → playing → leaderboard →
+  (≥50% press LET'S GO) → next round. `roundNumber` increments each round.
+- Players can join any time and spawn into a running round.
 
 This is a joke project. It does not need to be secure, abuse-resistant, or
 horizontally scalable. It needs to be fun once, at a party, over a shared URL.
@@ -37,352 +36,352 @@ horizontally scalable. It needs to be fun once, at a party, over a shared URL.
 
 ## 2. Tech & hosting
 
-- **Single Node service** (Node 20+, ESM). `server/index.js` runs an HTTP server
-  that (a) serves the static client from `/client` and (b) hosts a WebSocket
-  server on the same port. This is intentional: one Railway service does
-  everything, no separate frontend host, no CORS.
-- **Why not Vercel**: Vercel is serverless and cannot hold long-lived WebSocket
-  connections. We chose a single always-on box (Railway). If you ever want
-  Vercel for the frontend, you'd split the client out and point its `wsUrl()` at
-  the Railway server; not necessary today.
-- **Authoritative server**: the server owns all truth and runs the simulation at
-  `TICK_RATE` (30Hz). Clients send inputs and render snapshots. No client-side
-  prediction (not needed at LAN/party latencies; add later if desired).
-- **No database**. All state is in memory and resets on restart. Fine for the use case.
+- **Single Node service** (Node 20+, ESM). `server/index.js` serves the static
+  client from `/client`, hosts the WebSocket server on the same port, runs the 30Hz
+  tick loop, and exposes `/admin`. One Railway service, no separate frontend, no CORS.
+- **Authoritative server** at `TICK_RATE` (30Hz). Clients send inputs and render
+  snapshots. **No client-side prediction/interpolation** (still a gap — see §11).
+- **No database**. All state in memory; resets on restart or via `/admin/reset`.
+- On boot the server prints its LAN URL (for phones). Static responses send
+  `Cache-Control: no-store` (dev-friendly; relax for production).
 
 ---
 
 ## 3. Repo map
 
 ```
-server/index.js          Networking + static serving + tick loop. THIN wrapper.
+server/index.js          Networking + static serving + tick loop + /admin routes. THIN.
 server/game/constants.js ALL tunables. Change gameplay feel here first.
-server/game/game.js       The Game class: authoritative sim. Pure (no IO/timers).
-server/game/effects.js    Pure weighted power-up/debuff roller (injectable RNG).
-server/game/vec.js        Geometry + charge oscillator. Pure functions.
-server/game/spawn.js      Randomized loci/spawn placement. Injectable RNG.
-client/index.html         Join overlay + canvas + styling.
-client/main.js            WS client, input wiring, requestAnimationFrame loop.
-client/render.js          Canvas drawing from a snapshot. No game logic.
-client/input.js           Touch/mouse: drag-move, tap-pickup, hold-charge-release.
-client/audio.js           Procedural Web Audio SFX + optional file overrides.
-client/assets.js          Sprite manifest + loader.
-client/assets/sprites/    Pre-baked PNGs (see scripts/generate-art.py).
-tests/*.test.js           Unit tests (Node built-in runner).
-scripts/generate-art.py   One-shot Python/Pillow art baker. Not needed at runtime.
+server/game/game.js      The Game class: authoritative sim. Pure (no IO/real timers).
+server/game/effects.js   Weighted power-up/curse roller (injectable RNG).
+server/game/vec.js       Geometry + charge oscillator. Pure.
+server/game/spawn.js     Randomized loci/spawn placement. Injectable RNG.
+client/index.html        Title screen (logo) + canvas + buttons.
+client/main.js           WS client, input wiring, audio triggers, rAF render loop.
+client/render.js         Canvas drawing + all juice (pure draw from a snapshot).
+client/camera.js         Following camera + screen↔world transform.
+client/input.js          Touch/mouse: drag-to-move + tap.
+client/audio.js          File SFX + looping music (preloaded) + procedural fallback.
+client/assets.js         Sprite manifest + loader.
+client/admin.html        /admin: screen previews + server reset.
+client/assets/sprites|music|sounds/   Real art + audio. game-logo.png, bg.png.
+scripts/segment_art.py   Segments art-source/ sheets into sprites (Python+Pillow).
+art-source/              Hand-provided source sheets + the segment script's inputs.
+tests/*.test.js          Unit tests (Node built-in runner).
+ART.md / SOUND.md        Asset spec / sound spec (hand-off for new art & audio).
 ```
 
 **Design rule to preserve**: keep `game.js` free of networking and real timers.
 Everything is driven by `tick(dtMs)` and input methods that take an explicit
-`nowMs`. This is what makes it fully unit-testable. Do not call `Date.now()`
-inside the Game; the server passes time in.
+`nowMs` (= `game._clock`). This is what makes it fully unit-testable. Never call
+`Date.now()` inside the Game.
 
 ---
 
 ## 4. Game state model
 
-### Player object (server-side, see `Game.addPlayer`)
+### Player object (`Game.addPlayer`)
 ```
-id, name, x, y,
-dir {x,y}            facing unit vector (last nonzero move), used for throw direction
+id, name, x, y
+vx, vy               velocity (used by the 'slidey' ice physics; otherwise = input*speed)
+dir {x,y}            facing unit vector (last nonzero move) — punch/throw direction
 moveInput {x,y}      current input unit vector
-isMallen             name === 'mallen' (case-insensitive)
-radius               PLAYER.radius, or MALLEN.radius (grows in frenzy)
+isMallen             name === 'mallen'
+radius               computed by _computeRadius (base × tiny × frenzy)
 score                deliveries (delivery players)
+eaten                tubs devoured (Mallen)
 carryingTubId        id of carried tub or null
 charging, chargeStartMs
-hitsTaken            toward dropping (reset on drop)
-eaten                tubs devoured (Mallen)
+lastAttackMs         punch cooldown clock (inits to -1e9 so the first punch isn't gated)
+hitsTaken            vestigial (a punch now knocks the tub loose in one hit)
 frenzyMs             remaining frenzy time (Mallen)
-lastAttackMs         attack cooldown bookkeeping (Mallen)
-eatingUntilMs        eat-animation movement lock (Mallen)
-spriteIndex          which delivery sprite variant (0..5)
+eatingUntilMs        chomp animation movement lock (Mallen)
+noPickupUntilMs      auto-pickup suppressed until this clock time (after a forced drop)
+stunnedUntilMs       frozen (can't act) until this clock time (Mallen devour shockwave)
+dashUntilMs, dashVx, dashVy   active Mallen lunge
+spriteIndex          delivery color variant (id % 12)
+effect, effectUntilMs, cannonArmed, greaseGrabMs(-1 sentinel)
 ready                pressed LET'S GO
 ```
 
 ### Tub object
 ```
-id, x, y, vx, vy,
-state    'ready' (on truck, tappable) | 'carried' | 'flying' | 'loose'
-carrierId, lastCarrierId   lastCarrierId credits the delivery on a score
+id, x, y, vx, vy
+state    'ready' (at truck) | 'carried' | 'flying' | 'loose'
+carrierId, lastCarrierId      lastCarrierId credits a delivery on a score
+cannon                        this throw is a curd-cannon mega-throw
+thrownBy, thrownGraceUntil    the thrower can't instantly re-catch their own throw
 ```
 
-### Tub lifecycle / truck restock (IMPORTANT, recently added)
-- The truck always shows at least one **ready** tub (rendered in a small cluster
-  via `_positionReadyTubs`).
-- Tapping a ready tub picks it up (first come, first serve). Taking a ready tub
-  calls `_scheduleTruckRefill(now)`, which pushes `now + LOCI.truckRefillMs`
-  (1000ms) onto `_truckRefillQueue`.
-- `_processTruckRefills(now)` (called each tick while PLAYING) spawns a
-  replacement ready tub when a timer elapses. Stock is **unlimited**.
-- A safety net in `_processTruckRefills` guarantees the truck is never completely
-  empty during play.
-- Many players can carry tubs simultaneously; many tubs can be flying/loose/scored
-  at once. (Tested in `tests/game.test.js`.)
+### Tubs: pickup / catch / deliver / restock
+- The truck always keeps ≥1 **ready** tub, positioned in a visible row in front of
+  it (`_positionReadyTubs`).
+- **Auto-pickup**: a delivery player who runs over a ready/loose tub grabs it
+  automatically (`_autoPickup`), unless `noPickupUntilMs` is active (after a forced
+  drop) so the Mallen gets a beat to eat it.
+- **Catch**: a flying tub that hits an empty-handed delivery player is auto-caught;
+  it bumps a carrying player or the Mallen instead.
+- **Deliver**: walking a carried tub into the fridge scores it
+  (`_checkCarriedDeliveries`), or throw it (`release`). Fridge scoring uses
+  segment distance so fast/cannon throws can't tunnel past the fridge.
+- Taking a ready tub schedules a 1s **refill** (`_scheduleTruckRefill`);
+  `_processTruckRefills` spawns the replacement. A safety net keeps ≥1 ready tub.
+  The **magnet** pulling a ready tub off the truck also schedules a refill (so it
+  can't trigger the instant safety-net respawn → no infinite spawn).
 
-### Phases (`PHASE` in constants.js)
-`lobby`, `countdown`, `playing`, `leaderboard`. Round starts when
-`readyFractionMet()` is true (≥ `ROUND.readyFraction` = 50% of connected players
-pressed ready). `startRound()` re-randomizes loci, resets players, stocks the truck.
+### Phases (`PHASE`)
+`lobby`, `countdown`, `playing`, `leaderboard`. A round starts when
+`readyFractionMet()` (≥ `ROUND.readyFraction` = 50%). `startRound()` increments
+`roundNumber`, re-randomizes loci, recomputes the no-Mallen `safeZone`, resets
+players, stocks the truck, and emits a `roundStart` event.
 
 ---
 
 ## 5. Network protocol
 
-JSON messages over a single WebSocket. Types in `constants.js` (`MSG`).
+JSON over a single WebSocket. Types in `constants.js` (`MSG`).
 
 ### Client → server
-| type      | payload          | meaning |
-|-----------|------------------|---------|
-| `join`    | `{name}`         | join the game; server replies `welcome` |
-| `input`   | `{x,y}`          | raw movement vector (server normalizes); `{0,0}` = stop |
-| `pickup`  | —                | tap: grab nearest ready/loose tub in reach |
-| `charge`  | —                | begin charging a throw (must be carrying) |
-| `release` | —                | release throw at current oscillator value |
-| `ready`   | —                | pressed LET'S GO |
+| type | payload | meaning |
+|------|---------|---------|
+| `join`    | `{name}` | join; server replies `welcome` |
+| `input`   | `{x,y}`  | movement vector (server normalizes); `{0,0}` = stop |
+| `pickup`  | — | manual grab (auto-pickup usually handles it) |
+| `charge`  | — | begin charging a throw (must be carrying) |
+| `release` | — | release the throw |
+| `punch`   | — | PUNCH/ATTACK: knock tubs loose / Mallen lunge |
+| `ready`   | — | pressed LET'S GO |
 
 ### Server → client
-| type      | payload                | meaning |
-|-----------|------------------------|---------|
-| `welcome` | `{id}`                 | assigns the client its player id |
-| `state`   | `{snapshot, events}`   | full snapshot + drained one-shot events, every tick |
+| type | payload | meaning |
+|------|---------|---------|
+| `welcome` | `{id}` | assigns the client its player id |
+| `state`   | `{snapshot, events}` | full snapshot + drained one-shot events, each tick |
 
-`snapshot` shape: `{phase, countdownMs, loci:{truck,fridge}, roundWinner,
-players:[...], tubs:[{id,x,y,state}], presents:[{id,x,y,landed}]}`. Each player in
-the snapshot also carries `effect` (active FX id or null) and `effectMs` (ms
-remaining). See `Game.snapshot()`.
+`snapshot`: `{phase, round, countdownMs, arena:{width,height}, loci:{truck,fridge},
+safeZone:{x,y,w,h}, roundWinner, players:[...], tubs:[{id,x,y,state}],
+presents:[{id,x,y,landed}]}`. Each player carries `{id,name,x,y,dir,isMallen,radius,
+score,eaten,carrying,charging,frenzy,ready,stunned,dashing,spriteIndex,effect,
+effectMs}`. (`moving` is **not** in the snapshot — the client synthesizes it from
+position deltas; see §13.)
 
-`events` is an array of one-shot events for SFX/juice, drained each broadcast:
-`join, pickup, throw, splat, score, attack, drop, chomp, restock, roundEnd,
-presentDrop, presentClaim, explosion, swap, pinata`.
-The client plays a sound per event (`client/audio.js`) and spawns splatters for
-`splat`/`chomp`/`drop`/`pinata`/`presentClaim`, plus a ring of splatters for
-`explosion` (`render.js addSplat`, wired in `main.js`).
+`events` (drained each broadcast, one-shot, for SFX/juice):
+`join, pickup, throw, score{id}, attack{id,dx,dy,cd}, drop, chomp{id}, restock,
+roundEnd, presentDrop, presentClaim{id,fx,buff}, explosion, swap, pinata, dash,
+firstCurd, roundStart{n}, stun, bam`. All carry `x,y` where relevant. The client
+plays sounds and spawns particles per event (see §9 and SOUND.md).
 
-**Note on time**: the server uses `game._clock` (accumulated tick time) as `nowMs`
-for input handlers. This is monotonic per process and resets at round start.
+**Time**: input handlers receive `nowMs` = `game._clock` (monotonic per process,
+reset to 0 at round start).
 
 ---
 
-## 5.5 Presents & power-up/debuff system
+## 5.5 Presents & effects
 
-Files: `server/game/effects.js` (pure weighted roller), present/effect logic in
-`server/game/game.js`, tuning in `constants.js` (`PRESENT`, `EFFECT`, `FX`,
-`BUFF_POOL`, `DEBUFF_POOL`, `WILDCARD_POOL`, `ONE_SHOT`, `CLIENT_FX`).
+Files: `effects.js` (roller), present/effect logic in `game.js`, tuning in
+`constants.js` (`PRESENT`, `EFFECT`, `FX`, `BUFF_POOL`, `DEBUFF_POOL`,
+`WILDCARD_POOL`, `MALLEN_BUFF_POOL`, `ONE_SHOT`, `CLIENT_FX`).
 
-**Spawning** (`_updatePresents`): every `PRESENT.spawnMinMs`–`spawnMaxMs`
-(12–20s, randomized), if fewer than `PRESENT.maxOnField` (2) presents exist, one
-spawns above the arena and parachutes down over `fallDurationMs` to a random
-landing spot. **A present is only claimable once `landed === true`** (walk onto
-it). First player within `radius` claims it (Mallen included).
+**Spawning** (`_updatePresents`): every `spawnMinMs`–`spawnMaxMs` (12–20s), if fewer
+than `maxOnField` (2) exist, one parachutes in over `fallDurationMs` to a random
+spot. Claimable only once `landed`. First player within `radius` claims it.
 
-**Effect roll** (`effects.js rollEffect`): Mallen draws ONLY from `BUFF_POOL`
-(birthday rule). Everyone else draws from buffs + debuffs + wildcards, weighted.
-Claiming replaces any current effect. Timed effects last `EFFECT.defaultDurationMs`
-(6s); one-shots (`ONE_SHOT`) apply instantly with no active duration.
+**Roll** (`rollEffect`): the Mallen draws from `MALLEN_BUFF_POOL` (= `BUFF_POOL`
+minus `curd_cannon`, since he can't throw). Everyone else draws buffs + debuffs +
+wildcards, weighted. Timed effects last `EFFECT.defaultDurationMs` (6s); one-shots
+apply instantly.
 
 **Effects** (`FX`):
-- `double_speed` / `half_speed` — speed multipliers in `_effectiveSpeed`.
-- `two_x_points` — doubles a delivery (`_scoreDelivery`) or a Mallen devour.
-- `invincible` — Mallen skips this player as an attack target (`_mallenLogic`).
+- `double_speed` / `half_speed` — speed multipliers (`_effectiveSpeed`).
+- `two_x_points` — doubles a delivery or a Mallen devour.
+- `invincible` — punch/attack skips this player (kept their tub); also can't be
+  stunned; client shows 3 tubs orbiting the head + loops the invincibility theme.
 - `magnet` — pulls loose/ready tubs toward the holder (`_applyMagnets`).
-- `curd_cannon` — arms the next throw; that tub gets an enlarged fridge score
-  radius (`EFFECT.cannonScoreMult`) and the effect disarms on release.
-- `tiny` — shrinks radius via `_computeRadius` (`EFFECT.tinyMult`).
-- `greased` — drops the carried tub ~1s after grabbing (`_tickEffects`).
-- `explosion` (one-shot) — knocks back nearby players; if claimer is Mallen,
-  victims also drop tubs (`_applyOneShot`).
-- `swap` (one-shot) — exchanges positions with a random player.
-- `pinata` (one-shot) — drops `EFFECT.pinataCount` loose tubs around the claimer.
-- **CLIENT-ONLY** (`CLIENT_FX`): `backwards` (inverts drag in `main.js sendMove`),
-  `blindness` (screen splatter overlay in `render.js drawBlindness`), `banana`
-  (slidey momentum smoothing in `main.js sendMove`). The server still tracks these
-  as the player's `effect` so the client can read its own and react.
+- `curd_cannon` — the next throw flies **~10× as far** (`EFFECT.cannonRangeMult`),
+  then disarms. (NOT an enlarged score radius anymore.)
+- `tiny` — shrinks radius (`tinyMult`).
+- `greased` — drops the carried tub ~1s after grabbing.
+- `backwards` — CLIENT: inverts the steering direction (`main.js`).
+- `blindness` — CLIENT: cottage-cheese screen overlay (`render.js drawBlindness`).
+- `banana` ("slidey") — **server-side ice physics**: velocity eases toward input at
+  `EFFECT.bananaAccel` (low = chaotic; slow to start, long coast/overshoot).
+- `explosion` (one-shot) — knockback; if the claimer is the Mallen, victims also
+  drop tubs.
+- `swap` (one-shot) — swap positions with a random player.
+- `pinata` (one-shot) — drops `pinataCount` loose tubs around the claimer.
 
-**Radius is computed, not mutated** (`_computeRadius`): base × tiny × frenzy. This
-is the single source of truth — do NOT mutate `p.radius` from multiple places, or
-frenzy and tiny will fight (this was a fixed bug; see §10 tests).
+`CLIENT_FX` = `{backwards, blindness}` (the client enforces these by reading its own
+`effect`; the server owns assignment/duration). Note `banana` is **no longer**
+client-only — it's authoritative server movement now.
+
+**Radius is computed, never mutated piecemeal** (`_computeRadius` = base × tiny ×
+frenzy) — the single source of truth (fixed bug; tested).
 
 ---
 
 ## 6. Controls (client)
 
-Implemented in `client/input.js`:
-- **Drag**: movement vector from drag origin → current point (deadzone 14px).
-  Sent as `input`. Releasing sends `input {0,0}`.
-- **Tap** (stationary press, no drag): `pickup`. Server grabs nearest tappable tub.
-- **Double-tap and hold**: second tap within 280ms, then hold 160ms → `charge`.
-  A power bar oscillates (triangle wave, `THROW.oscillationHz` = 2.4Hz) along the
-  facing direction. Releasing sends `release`; server recomputes authoritative
-  power from its own clock.
+`client/input.js` is just drag-to-move + tap. The buttons are HTML elements wired in
+`main.js`.
 
-The charge oscillator is mirrored client-side **for the visual arc only**
-(`chargePower` in `main.js`); the server is authoritative on release timing.
-There is unavoidable minor visual/authoritative mismatch due to latency — fine
-for a joke; if it matters, send the charge-start timestamp and reconcile.
+- **Drag**: each frame the character steers toward the finger's world position
+  (`screenToWorld` via the camera). A held finger keeps it moving; releasing sends
+  `input {0,0}`. Camera follows the self player (`camera.js`).
+- **Tap**: sends `pickup` (mostly redundant — pickup is automatic on contact).
+- **Action button** (lower-left, `#actionBtn`): **HOLD-TO-THROW** while carrying
+  (charge oscillates, release throws), else **PUNCH** (delivery) / **ATTACK**
+  (Mallen). Shows a depleting cooldown pie-clock driven by the server's `attack`
+  event `cd`.
+- Throw/punch direction = your facing (`dir`), shown by the arrow at your feet.
+- **LET'S GO** (`#goBtn`) during lobby/leaderboard.
+
+The charge oscillator is mirrored client-side for the visual arc only; the server is
+authoritative on release timing.
 
 ---
 
-## 7. Tunables (server/game/constants.js)
+## 7. Tunables (`server/game/constants.js`)
 
-Everything that affects feel is here. Highlights:
-- `TICK_RATE` 30
-- `PLAYER.speed` 230, `MALLEN.speed` 190 (Mallen slower)
-- `MALLEN.attackRange` 70, `attackCooldownMs` 600, `hitsToDrop` 2, `eatRange` 50
-- `FRENZY`: `durationMs` 4000, `sizeMult` 1.5, `speedMult` 1.35, `attackCdMult` 0.6
-- `THROW`: `minPower` 260, `maxPower` 820, `oscillationHz` 2.4
-- `LOCI`: `scoreRadius` 80 (landing tolerance — raise to make scoring easier),
-  `minSeparation` 520, `truckRefillMs` 1000
-- `ROUND`: `pointsToWin` 10, `mallenEatsToWin` 10, `readyFraction` 0.5,
-  `startCountdownMs` 3000
+Highlights (everything feel-related lives here):
+- `ARENA` 1600×1600. `TICK_RATE` 30.
+- `PLAYER.speed` 230. `MALLEN.speed` 230 (equal; frenzy ×1.35). `MALLEN.attackRange`
+  70, `attackCooldownMs` 600, `eatRange` 50, `eatDurationMs` 900. (`hitsToDrop` is
+  vestigial — one punch knocks loose.)
+- `FRENZY` durationMs 4000, sizeMult 1.5, speedMult 1.35, attackCdMult 0.6.
+- `STUN` radius 340, durationMs 2000 (Mallen devour shockwave; invincible resists).
+- `PUNCH` reach 46, cooldownMs 450, launchSpeed 520, knockback 26, **mallenDash 285,
+  dashMs 200** (the Mallen lunge).
+- `COLLISION.shove` 6 (running into someone nudges them).
+- `SAFE_ZONE` halfW 150, halfH 115, offsetY 30 (no-Mallen pickup zone around truck).
+- `THROW` minPower 40 (barely travels), maxPower 1600 (~2× old reach), oscillationHz
+  1.0 (slow/readable). **Mirrored in `client/main.js` — keep in sync.**
+- `TUB` radius 14, friction 0.90, minSlideSpeed 20, bump 16.
+- `LOCI` truckRadius 60, fridgeRadius 54, scoreRadius 80, minSeparation 700,
+  edgePadding 120, truckRefillMs 1000.
+- `EFFECT` defaultDurationMs 6000, cannonRangeMult 10, bananaAccel 0.7 (lower = more
+  slippery), magnetRadius 260, magnetPull 520, explosionRadius 220, etc.
+- `ROUND` pointsToWin 10, mallenEatsToWin 10, readyFraction 0.5, startCountdownMs 3000.
 
-If you change `THROW` here, also update the mirrored constant in `client/main.js`
-(`THROW`) so the visual arc matches. (TODO below proposes serving constants to
-the client to remove this duplication.)
+Camera tuning is client-side in `client/camera.js`: `VIEW.targetSpan` (380 — world
+units across the short screen axis; lower = more zoomed), `minScale`/`maxScale`.
 
 ---
 
 ## 8. Art
 
-Pre-baked PNGs in `client/assets/sprites/`, generated by
-`scripts/generate-art.py` (Python + Pillow). Deterministic (seeded). Includes:
-6 delivery variants × 2 walk frames, Mallen body × 2 frames (normal + frenzy),
-tub, truck, fridge, 3 splatter frames, 6 cottage-cheese ad banners, and a
-`mallen_face_placeholder.png`.
+Real art lives in `client/assets/sprites/`, segmented from hand-provided sheets in
+`art-source/` by `scripts/segment_art.py` (Python + Pillow; not needed at runtime):
 
-### Mallen face system
-The renderer composites `images.mallenFace` onto the Mallen's head each frame
-(`render.js drawPlayer`). Replace `mallen_face_placeholder.png` with a real face
-PNG (transparent bg ideal). **Backlog item**: support directional/expression
-faces — e.g. `mallen_face_left/right/eat.png` selected by `dir` and eating state.
+- **Delivery crew**: a grayscale 8-direction walk sheet, recolored into **12 player
+  colors** (`PLAYER_COLORS` in render.js mirrors `DELIVERY_COLORS` in the script) ×
+  8 directions × 2 frames → `delivery_{v}_{dir}_{f}.png`.
+- **Mallen**: a demon 8-direction sheet → vivid-red **frenzy** + desaturated
+  **normal** × 8 dirs × 2 frames → `mallen[_frenzy]_{dir}_{f}.png`.
+- **Faces**: real head photos → `mallen_face.png` (normal) + `mallen_face_fiend.png`
+  (cottage-cheese-smeared), composited bobblehead-style over the demon's head in
+  `render.js drawPlayer` (mirrored by facing, bobs while walking).
+- **Props**: `tub.png`, `truck.png`, `fridge.png`, `splat_0/1/2.png`, `present.png`,
+  `parachute.png`, `birthday_tub.png`, `ad_app_icon.png`, the street-scene floor
+  `bg.png` (tiled), and `game-logo.png` (title screen).
+
+8-direction rendering: `drawPlayer` maps `p.dir` to one of 8 facings (`dir8`).
+**ART.md** is the spec to hand an image model for new art. The old
+`scripts/generate-art.py` procedural baker is legacy/unused.
 
 ---
 
 ## 9. Audio
 
-`client/audio.js` synthesizes every SFX with Web Audio (oscillators + noise
-bursts), so there are no audio files to ship. Events map to sounds in
-`PROCEDURAL`. To use real CC0 files, populate `FILE_SOUNDS` and drop files in
-`client/assets/sounds/`; a present file overrides the procedural version.
-Audio context is created on first user gesture (join/ready) to satisfy browser
-autoplay policies.
+`client/audio.js` plays **real `.mp3` files**, with a procedural Web Audio fallback
+for incidental events. **SOUND.md** is the authoritative spec — read it before
+recording. Summary:
+
+- **`prefetchAudio()`** fetches all audio bytes up front; the JOIN button is gated
+  until sprites + audio are ready (so the first round is smooth). Clips decode on
+  the join gesture from the cached bytes.
+- **Named SFX** (`SFX_FILES`, played via `playSound`): global cues `dash` (distance-
+  attenuated from the Mallen), `firstCurd`, `round`; local cues `score`, `ad`, and
+  **one per effect** (`double_speed`, `half_speed`, `banana`, `swap`, …) keyed by the
+  `presentClaim` event's `fx`.
+- **Music** (`MUSIC_FILES`): looping per-screen tracks — `title` (lobby), `gameplay`
+  (countdown/playing), `score` (leaderboard) — crossfaded by `setMusic`. Low volume.
+- **Invincibility theme**: `playLoop('invincible_theme')` while the self player is
+  invincible, stopped when it ends.
+- Incidental events (chomp, splat, throw, stun, etc.) use synthesized `PROCEDURAL`
+  sounds; override any via `FILE_SOUNDS`.
+- On `visibilitychange→hidden` the audio engine **suspends** and rendering pauses
+  (CPU saving while the screen is off); resume calls are guarded by `!document.hidden`.
 
 ---
 
 ## 10. Tests
 
-`npm test` (Node built-in runner, no deps) — 55 tests. Coverage:
-- `vec.test.js`: geometry + charge oscillator bounds.
-- `spawn.test.js`: loci separation/padding invariants (50 seeds), spawn bounds.
-- `game.test.js`: join, Mallen role assignment + promotion on disconnect,
-  pickup of ready tubs, **1s truck refill timing**, **many simultaneous carriers**,
-  carry-follow, charge/release projectile, scoring at fridge, Mallen attack→drop,
-  devour→frenzy→expire, round-end (both win conditions), ready fraction, countdown,
-  player–player collision, player–truck collision, snapshot serialization,
-  event draining.
-- `effects.test.js`: weighted pick membership, **Mallen-only-buffs (300 seeds)**,
-  delivery debuffs/wildcards appear, present spawn+parachute, claim-on-touch,
-  each effect's mechanic (double/half speed, 2x points, invincibility, explosion
-  knockback, pinata, swap, tiny shrink/restore, curd cannon ranged score, greased
-  drop, expiry), snapshot includes presents+effect, startRound clears effects, and
-  the **frenzy+tiny radius regression** (radius is computed, never corrupted).
-
-Tests use a seeded RNG (`tests/helpers.js`) and drive the sim with explicit
-`tick(dtMs)` steps — no real timers, no network. **Keep new game logic in
-`game.js`/pure modules and add tests there.** Do not put logic in `index.js`.
-
-Also validated (not in the suite): a 90-second in-process soak with 5 bots across
-multiple rounds — zero runtime/snapshot errors — and an offline HTTP smoke test
-of static serving. The one thing not verifiable offline is the live browser↔server
-WebSocket round-trip; confirm two clients see each other move as the first check on Railway.
+`npm test` (Node built-in runner, no deps) — **63 tests**. Driven by seeded RNG
+(`tests/helpers.js`) and explicit `tick(dtMs)` steps; no real timers/network.
+Coverage includes: roles + promotion, auto/manual pickup + 1s refill, carry-follow,
+charge/release projectile + scoring, **punch knock-loose + dash reach + cooldown**,
+**catch a thrown tub**, **devour→frenzy→stun-nearby**, **invincibility blocks a
+punch**, **slidey coasting**, **magnet doesn't spawn infinite tubs**, **curd cannon
+mega-throw scores from range**, the no-Mallen pickup zone, round-end (both wins),
+collisions, snapshot serialization, and the per-effect mechanics. **Keep new game
+logic in `game.js`/pure modules and add tests there.**
 
 ---
 
 ## 11. Known gaps / not yet built
 
-> The present/power-up system, birthday leaderboard, client-only effects
-> (backwards/blindness/banana), and the Cottage Fiend rename are all DONE and
-> tested. The items below are what remains.
-
-1. **No client-side prediction or interpolation.** Movement is rendered straight
-   from snapshots at 30Hz; on a bad connection it will look choppy. Add entity
-   interpolation (render ~100ms in the past, lerp between last two snapshots) for
-   smoothness. This is the highest-value polish item if latency is noticeable.
-2. **Constants duplicated** between server and `client/main.js` (THROW, and the
-   effect id strings in `render.js`/`main.js`). Serve a constants subset in the
-   `welcome` message and have the client use it.
+1. **No client-side prediction or interpolation.** Movement renders straight from
+   30Hz snapshots; on a bad connection it's choppy (the Mallen dash is the most
+   visible victim — it steps between snapshots). Add entity interpolation (render
+   ~100ms in the past, lerp between snapshots). Highest-value polish item.
+2. **Duplicated constants.** `THROW` (server vs `client/main.js`) and the 12-color
+   palette (`DELIVERY_COLORS` in the Python script vs `PLAYER_COLORS` in render.js)
+   are hand-maintained copies. Serve a constants subset in `welcome` to dedupe.
 3. **No reconnect.** A dropped socket ends the session (overlay prompts refresh).
-   Could add rejoin-by-name.
-4. **Single Mallen.** If `mallen` isn't taken, there is simply no Mallen that
-   round. Decide: auto-assign a Mallen if none present? (Design choice — left to you.)
-5. **Throw direction = last move direction.** You can't aim independently of
-   movement. Could add aim during charge (drag during hold sets direction).
-6. **Tap vs. double-tap edge cases** on some mobile browsers (300ms synthetic
-   click, etc.). Test on target devices; tune `DOUBLE_TAP_MS`/`HOLD_MS` in input.js.
-7. **Mallen face is a single static image.** See §8 for the directional backlog.
-8. **Banana (slidey) effect** only smooths direction while actively dragging; it
-   does not coast after release (that would need a per-frame input loop). Fine as a
-   joke; revisit if you want true momentum.
-9. **Ads are static banners.** Could rotate more aggressively, add fake video ads,
-   popups, an interstitial between rounds ("THIS ROUND SPONSORED BY CURDS™").
-10. **Accessibility/keyboard**: no keyboard controls (WASD) for desktop testing
-    convenience. Easy add in input.js.
+4. **Single Mallen.** If `mallen` isn't taken, there's no Mallen that round.
+5. **No aim independent of movement.** Punch/throw fire in your last-moved facing.
+6. **`no-store` on all static assets** → re-download every load. Fine for a party;
+   relax for production.
+7. **Per-effect SFX are placeholders** (copies of one test clip) until real
+   recordings land (see SOUND.md).
+8. **No keyboard controls** for desktop testing.
 
 ---
 
-## 12. Prioritized backlog (suggested order for Claude Code)
+## 12. Admin
 
-**P0 — make it feel good live**
-- [ ] Entity interpolation on the client (smooth movement between snapshots).
-- [ ] Serve constants in `welcome`; remove client/server duplication (THROW + FX ids).
-- [ ] Playtest pass on real phones; tune `DOUBLE_TAP_MS`, `HOLD_MS`, deadzone,
-      `scoreRadius`, throw power range, Mallen speed/attack feel, present cadence.
-
-**P1 — depth & juice**
-- [ ] Aim-during-charge (drag while holding sets throw direction).
-- [ ] Directional/expression Mallen faces.
-- [ ] More splatter, screen shake on chomp/explosion, frenzy screen vignette.
-- [ ] Real CC0 SFX wired via `FILE_SOUNDS`.
-- [ ] Between-round cottage-cheese "ad break" interstitial.
-- [ ] More present effects (the pools in `constants.js` are easy to extend).
-
-**P2 — robustness (only if it ever needs to survive more than one party)**
-- [ ] Reconnect-by-name.
-- [ ] Auto-assign a Mallen if none present (if desired).
-- [ ] Basic rate-limiting / input sanity (it's currently trusting; fine for a joke).
-- [ ] Multiple concurrent game rooms (currently one global game).
-
-**P3 — nice-to-haves**
-- [ ] Keyboard controls for desktop.
-- [ ] Spectator mode / lobby player list.
-- [ ] Persistent leaderboard (would require the no-DB rule to change).
+`/admin` (no auth — joke game): preview links render each screen with fake data
+(`client/main.js` `fakeSnapshot`, via `?preview=score|countdown|playing|lobby`, no
+server connection), and a **POST-only** `RESET SERVER STATE` button hits
+`/admin/reset` which does `game = new Game()` and closes all sockets.
 
 ---
 
 ## 13. Gotchas for whoever continues this
 
-- The Game uses `game._clock` as its notion of "now" (ms). Input handlers receive
-  `nowMs`; the server passes `game._clock`. `startRound()` resets `_clock` to 0.
-- **Radius is computed by `_computeRadius`, never mutated piecemeal.** It combines
-  base size, Tiny, and frenzy. If you add an effect that changes size, add it there
-  — do not write `p.radius = ...` elsewhere or frenzy/tiny will desync (fixed bug).
-- `ready` tubs are stationary and immune to physics and Mallen eating (only
-  `loose` tubs are devoured, only `carried`/`flying` are simulated). Magnet turns a
-  pulled `ready` tub into `loose`. Preserve these state checks if you refactor tubs.
-- Presents are only claimable once `landed === true` (matches "walk over it").
-- `greaseGrabMs` uses `-1` (not `0`) as the "none" sentinel, because clock 0 is a
-  valid grab time at round start. Don't switch it back to a falsy check.
-- `_nextPresentAt` uses `null` (not `0`) as "unscheduled", for the same reason.
-- Scoring credits `tub.lastCarrierId` (set on pickup), so a tub thrown by someone
-  who then gets attacked still credits the thrower when it lands in the fridge.
-- Curd cannon stamps `tub.cannon` at release and disarms; the enlarged score
-  radius lives on the flying tub, not the player.
-- Client-only effects (`backwards`, `blindness`, `banana`) are enforced in
-  `main.js`/`render.js` by reading the self player's `effect` from the snapshot.
-  The server still owns assignment and duration.
-- `_pushOutOf` handles the coincident-center case (player exactly on a locus
-  center) by pushing along +x; don't reintroduce a `d > 0` guard that skips it.
-- Static file server in `index.js` normalizes paths and blocks traversal outside
-  `/client`. Keep that check if you touch it.
-- The client tolerates missing art (`assets.js` resolves on error) and falls back
-  to drawn circles, so a missing PNG won't blank the game.
+- The Game uses `game._clock` as "now" (ms). `startRound()` resets it to 0.
+- **Radius is computed by `_computeRadius`, never mutated piecemeal** (base × tiny ×
+  frenzy). Add size effects there only.
+- `lastAttackMs` inits to `-1e9`, `greaseGrabMs` to `-1`, `_nextPresentAt` to `null`
+  — clock 0 is a valid time, so don't switch these to falsy checks.
+- Only `loose` tubs are devoured; `ready` tubs are stationary; `carried`/`flying` are
+  simulated. Magnet turns a pulled `ready` tub `loose` **and schedules a refill** (or
+  it spawns infinitely).
+- `punch()` resolves the hit along the lunge **segment** (`segDist`), so the Mallen's
+  long dash hits everyone in his path; it knocks tubs loose in one hit (`hitsToDrop`
+  is dead).
+- Scoring credits `tub.lastCarrierId`. Fridge scoring is segment-based (anti-tunnel).
+- `dir` is the punch/throw direction; the feet arrow visualizes it.
+- **`moving`** is synthesized client-side (position delta between snapshots in
+  `main.js`) — it is NOT in the server snapshot. Any new code that renders a snapshot
+  must set it, or sprites freeze on frame 0 (the `/admin` preview sets `moving:false`).
+- The Mallen never auto-attacks; he's driven by the PUNCH/ATTACK button like everyone.
+  His devour stuns nearby players (invincible resists).
+- Audio resume calls are guarded by `!document.hidden` so a backgrounded tab doesn't
+  wake the audio thread (keeps the screen-off CPU saving).
+- `index.js` uses `let game` (reassignable for `/admin/reset`); the tick loop and WS
+  handlers read the module-level `game`, so they pick up the reset instance.
+- Static file server normalizes paths and blocks traversal outside `/client`. Keep
+  that check.
+- The client tolerates missing art (`assets.js` resolves on error → drawn-circle
+  fallback) and missing audio (silent), so a missing asset won't blank the game.

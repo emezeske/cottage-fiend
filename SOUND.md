@@ -6,8 +6,12 @@ needed. Keep filenames exactly as listed.
 
 - **Format:** `.mp3` (also fine: `.wav`, `.ogg` — but keep the `.mp3` filename, or
   tell me and I'll change the mapping in `client/audio.js`).
-- **Length:** short one-shots (most ≈ 0.3–1.5s). They play once, no looping.
-- These are currently all copies of one placeholder test clip.
+- **Length:** the SFX are short one-shots (most ≈ 0.3–1.5s, play once). The
+  invincibility theme and the music tracks **loop**, so they can be longer.
+- SFX clips are currently placeholder copies of one test clip; the music tracks and
+  the invincibility theme are real audio.
+- All audio is **preloaded** before the JOIN button enables (so the first round is
+  smooth).
 
 ---
 
@@ -67,6 +71,23 @@ debuffs, and never curd cannon since he can't throw).
 |------|--------|
 | `sfx_swap.mp3` | swap positions with a random player |
 | `sfx_pinata.mp3` | drops a few loose tubs around you |
+
+---
+
+## Looping audio (theme + music)
+
+These **loop** while active, so they can be longer clips.
+
+| File | Folder | Plays when… | Who hears it |
+|------|--------|-------------|--------------|
+| `invincible.mp3` | `client/assets/sounds/` | **You** are invincible (the buff is active); stops when it wears off | **Local** — only the invincible player |
+| `title.mp3` | `client/assets/music/` | On the **lobby / title** screen | Everyone (each on their own device) |
+| `gameplay.mp3` | `client/assets/music/` | During the **countdown + active round** | Everyone |
+| `score.mp3` | `client/assets/music/` | On the **leaderboard / score** screen | Everyone |
+
+The three music tracks crossfade into each other on screen changes (~0.7s) and play
+at a low background volume (`MUSIC_VOL` in `client/audio.js`). Overwrite any file
+with the same name to replace it.
 
 ---
 

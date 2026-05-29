@@ -206,7 +206,10 @@ export function render(ctx, canvas, state, selfId, charge) {
   ctx.translate(cam.offX, cam.offY);
   ctx.scale(cam.scale, cam.scale);
 
-  drawFloor(ctx, arena || { width: 1600, height: 1600 });
+  // floor rotates per round: street -> grass -> desert -> repeat
+  const floors = [images.bg, images.bg2, images.bg3];
+  const floorImg = floors[(Math.max(1, state.round || 1) - 1) % 3] || images.bg;
+  drawFloor(ctx, arena || { width: 1600, height: 1600 }, floorImg);
   if (state.safeZone) drawSafeZone(ctx, state.safeZone);
 
   if (loci) {
@@ -342,12 +345,12 @@ function drawSafeZone(ctx, z) {
   ctx.restore();
 }
 
-function drawFloor(ctx, arena) {
-  if (images.bg) {
+function drawFloor(ctx, arena, bgImg) {
+  if (bgImg) {
     const T = arena.width / 4;   // tile ~4x smaller than the arena (tweak the divisor)
     for (let x = 0; x < arena.width; x += T)
       for (let y = 0; y < arena.height; y += T)
-        ctx.drawImage(images.bg, x, y, T, T);
+        ctx.drawImage(bgImg, x, y, T, T);
   } else {
     ctx.fillStyle = '#27331f';
     ctx.fillRect(0, 0, arena.width, arena.height);

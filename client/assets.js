@@ -4,7 +4,9 @@ export const DIRS = ['s', 'se', 'e', 'ne', 'n', 'nw', 'w', 'sw'];
 export const PLAYER_VARIANTS = 12;
 
 const MANIFEST = {
-  bg: 'bg.png',                            // arena floor (gritty street scene)
+  bg: 'bg.png',                            // arena floor (rotates per round: street -> grass -> desert)
+  bg2: 'bg2.png',
+  bg3: 'bg3.png',
   truck: 'truck.png',
   fridge: 'fridge.png',
   tub: 'tub.png',
