@@ -48,6 +48,7 @@ export class Game {
     this._firstScored = false;  // has anyone scored yet this round (for FIRST CURD)
     this.forcedFx = null;       // admin testing: force every present to this effect (null = random)
     this.mallenPower = MALLEN_POWER_DEFAULT; // admin: live difficulty knob for the Mallen (1-5)
+    this.presentRate = 1;       // admin: present-frequency multiplier (1 = normal, higher = more)
   }
 
   // Admin/testing: force every claimed present to roll a specific effect, or pass
@@ -62,6 +63,12 @@ export class Game {
     if (MALLEN_POWER[n]) this.mallenPower = n;
   }
   _mallenPow() { return MALLEN_POWER[this.mallenPower] || MALLEN_POWER[MALLEN_POWER_DEFAULT]; }
+
+  // Admin: multiply how often presents drop (1 = normal). Clamped to a sane range.
+  setPresentRate(rate) {
+    const r = Number(rate);
+    if (Number.isFinite(r) && r > 0) this.presentRate = Math.min(8, Math.max(0.25, r));
+  }
 
   // Emit the global FIRST CURD cue the first time anyone scores in a round.
   _maybeFirstCurd() {
@@ -366,7 +373,7 @@ export class Game {
   _scheduleNextPresent(now) {
     const span = PRESENT.spawnMaxMs - PRESENT.spawnMinMs;
     const base = PRESENT.spawnMinMs + this.rng() * span;
-    this._nextPresentAt = now + base / Math.max(1, this.players.size);
+    this._nextPresentAt = now + base / (Math.max(1, this.players.size) * this.presentRate);
   }
 
   _spawnPresent(now) {
@@ -384,9 +391,10 @@ export class Game {
 
   _updatePresents(dt, now) {
     if (this._nextPresentAt == null) this._scheduleNextPresent(now);
-    // raise the on-field cap with player count so it never throttles the faster
-    // spawn rate (presents get claimed quickly when there are many players).
-    const cap = Math.max(PRESENT.maxOnField, Math.ceil(this.players.size / 2));
+    // raise the on-field cap with player count + present rate so it never throttles
+    // the faster spawn rate (presents get claimed quickly when there are many players).
+    const cap = Math.min(16, Math.max(PRESENT.maxOnField,
+      Math.ceil((this.players.size / 2) * this.presentRate)));
     if (now >= this._nextPresentAt && this.presents.length < cap) {
       this._spawnPresent(now);
       this._scheduleNextPresent(now);

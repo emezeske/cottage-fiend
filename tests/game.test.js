@@ -437,6 +437,21 @@ test('presents roll varied effects within a round', () => {
 
 // Regression: double_speed must speed you up and half_speed slow you down — i.e.
 // the two effects (and the sounds keyed off their ids) are not swapped.
+test('present rate shortens the spawn interval (and clamps)', () => {
+  const g = newGame(7);
+  g.addPlayer('alice');
+  g.setPresentRate(1);
+  g._scheduleNextPresent(0);
+  const normal = g._nextPresentAt;
+  g.setPresentRate(4);
+  g._scheduleNextPresent(0);
+  const fast = g._nextPresentAt;
+  assert.ok(fast < normal, `4x (${fast}) should drop sooner than 1x (${normal})`);
+  g.setPresentRate(100); assert.equal(g.presentRate, 8);    // clamped high
+  g.setPresentRate(0);   assert.equal(g.presentRate, 8);    // non-positive ignored
+  g.setPresentRate(0.1); assert.equal(g.presentRate, 0.25); // clamped low
+});
+
 test('mallen power level scales his speed (and validates 1-5)', () => {
   const g = newGame();
   assert.equal(g.mallenPower, 3); // default

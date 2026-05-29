@@ -68,6 +68,17 @@
   <span id="forceStatus"></span>
   <p class="sub">Applies to newly claimed presents immediately, for everyone. Persists across RESET.</p>
 
+  <label for="presentRate">How often presents drop:</label>
+  <select id="presentRate">
+    <option value="0.5">0.5× — Fewer</option>
+    <option value="1" selected>1× — Normal</option>
+    <option value="2">2× — More</option>
+    <option value="3">3× — Lots</option>
+    <option value="5">5× — Chaos</option>
+  </select>
+  <span id="rateStatus"></span>
+  <p class="sub">Multiplies the drop rate (and on-field cap). Applies immediately. Persists across RESET.</p>
+
   <h2>Mallen power</h2>
   <label for="mallenPower">Difficulty (balance on the fly):</label>
   <select id="mallenPower">
@@ -98,6 +109,18 @@
         forceStatus.textContent = await r.text();
       } catch (e) {
         forceStatus.textContent = 'failed: ' + e;
+      }
+    };
+
+    const rate = document.getElementById('presentRate');
+    const rateStatus = document.getElementById('rateStatus');
+    fetch('/admin/present-rate').then(r => r.text()).then(v => { if (v) rate.value = v; }).catch(() => {});
+    rate.onchange = async () => {
+      try {
+        const r = await fetch('/admin/present-rate?rate=' + encodeURIComponent(rate.value), { method: 'POST' });
+        rateStatus.textContent = await r.text();
+      } catch (e) {
+        rateStatus.textContent = 'failed: ' + e;
       }
     };
 
