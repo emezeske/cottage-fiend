@@ -35,6 +35,8 @@ for (const d of DIRS)
 for (const d of DIRS) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.png`;
 // corgi_{dir} — the CORGI_ATTACK hunter
 for (const d of DIRS) MANIFEST[`corgi_${d}`] = `corgi_${d}.png`;
+// disc_{0..7} — spin frames for the DISC_GOLF projectiles
+for (let i = 0; i < 8; i++) MANIFEST[`disc_${i}`] = `disc_${i}.png`;
 
 export const images = {};
 

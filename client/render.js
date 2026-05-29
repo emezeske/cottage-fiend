@@ -17,8 +17,9 @@ const EFFECT_LABELS = {
   magnet: '🧲MAGNET', curd_cannon: '🚀CURD CANNON: MEGA THROW',
   half_speed: '🐌HALF SPEED', backwards: '🔄BACKWARDS', greased: '🧈GREASED',
   tiny: '🔬TINY', blindness: '🫥CURD BLIND', banana: '🍌SLIDEY',
+  disc_golf: '🥏DISC GOLF',
 };
-const BUFF_SET = new Set(['double_speed', 'two_x_points', 'invincible', 'magnet', 'curd_cannon']);
+const BUFF_SET = new Set(['double_speed', 'two_x_points', 'invincible', 'magnet', 'curd_cannon', 'disc_golf']);
 
 // transient splatters spawned from events, faded over time
 const splats = [];
@@ -352,6 +353,10 @@ export function render(ctx, canvas, state, selfId, charge) {
     if (!images.tub) fallbackCircle(ctx, t.x, t.y, 13, '#f2f0e0');
   }
 
+  drawDiscs(ctx, state);   // flying disc-golf frisbees
+
+
+
   for (const g of presents) {
     drawSprite(ctx, images.present, g.x, g.y, 52, 52);
     if (!images.present) fallbackCircle(ctx, g.x, g.y, 26, '#e57');
@@ -472,6 +477,17 @@ function drawCorgis(ctx, state) {
     const img = images[`corgi_${d}`];
     if (img) drawSprite(ctx, img, c.x, c.y, 64, 64);
     else fallbackCircle(ctx, c.x, c.y, 18, '#e8a24d');
+  }
+}
+
+// DISC_GOLF projectiles — spinning frisbees (cycle the 8 frames, phase per disc)
+function drawDiscs(ctx, state) {
+  const t = performance.now();
+  for (const d of (state && state.discs) || []) {
+    const f = (((t / 55) | 0) + d.id) % 8;
+    const img = images[`disc_${f}`];
+    if (img) drawSprite(ctx, img, d.x, d.y, 44, 44);
+    else fallbackCircle(ctx, d.x, d.y, 14, '#f4e6b0');
   }
 }
 

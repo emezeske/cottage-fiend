@@ -170,6 +170,7 @@ function connect(name) {
         if (e.type === 'bam') addBam(e.x, e.y);
         if (e.type === 'corgiHit') addBam(e.x, e.y);                 // corgi tackle
         if (e.type === 'corgiSpawn' || e.type === 'corgiGone') addPoof(e.x, e.y);
+        if (e.type === 'discHit') addBam(e.x, e.y);                  // frisbee bonk
         if (e.type === 'attack') {
           addPoof(e.x + (e.dx || 0) * 30, e.y + (e.dy || 0) * 30); // whiff cloud
           if (e.id === selfId && e.cd) { actionCdUntil = performance.now() + e.cd; actionCdMs = e.cd; }

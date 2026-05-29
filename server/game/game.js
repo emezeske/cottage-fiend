@@ -7,7 +7,7 @@
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
   PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
-  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI,
+  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC,
 } from './constants.js';
 
 const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SFX
@@ -51,6 +51,8 @@ export class Game {
     this.presentRate = 1;       // admin: present-frequency multiplier (1 = normal, higher = more)
     this.corgis = [];           // active CORGI_ATTACK hunters
     this._corgiSeq = 1;
+    this.discs = [];            // active DISC_GOLF projectiles
+    this._discSeq = 1;
   }
 
   // Admin/testing: force every claimed present to roll a specific effect, or pass
@@ -448,6 +450,39 @@ export class Game {
     if (fx === FX.CURD_CANNON) p.cannonArmed = true;
     if (fx === FX.TINY) p.radius = this._computeRadius(p);
     if (fx === FX.GREASED) p.greaseGrabMs = p.carryingTubId != null ? now : -1;
+    if (fx === FX.DISC_GOLF) p.nextDiscAt = now; // start flinging discs right away
+  }
+
+  // Disc-golf buff: each holder periodically flings a spinning disc in a random
+  // direction; a disc bonks any other player it flies through with a brief stun,
+  // then keeps going. Discs vanish after their (randomized) lifespan.
+  _updateDiscGolf(dt, now) {
+    for (const p of this.players.values()) {
+      if (p.effect !== FX.DISC_GOLF || now < (p.nextDiscAt || 0)) continue;
+      const a = this.rng() * Math.PI * 2;
+      const speed = DISC.minSpeed + this.rng() * (DISC.maxSpeed - DISC.minSpeed);
+      const life = DISC.minLifeMs + this.rng() * (DISC.maxLifeMs - DISC.minLifeMs);
+      this.discs.push({
+        id: this._discSeq++, x: p.x, y: p.y,
+        vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+        ownerId: p.id, expiresAt: now + life, hit: new Set(),
+      });
+      p.nextDiscAt = now + DISC.spawnIntervalMs;
+    }
+    for (const d of this.discs) {
+      d.x += d.vx * dt; d.y += d.vy * dt;
+      if (d.x < DISC.radius || d.x > ARENA.width - DISC.radius) d.vx = -d.vx;
+      if (d.y < DISC.radius || d.y > ARENA.height - DISC.radius) d.vy = -d.vy;
+      const cc = clampToArena(d.x, d.y, DISC.radius, ARENA); d.x = cc.x; d.y = cc.y;
+      for (const p of this.players.values()) {
+        if (p.id === d.ownerId || d.hit.has(p.id)) continue;
+        if (dist(d.x, d.y, p.x, p.y) < DISC.radius + p.radius && this._stunPlayer(p, now, DISC.stunMs)) {
+          d.hit.add(p.id);
+          this.events.push({ type: 'discHit', x: p.x, y: p.y });
+        }
+      }
+    }
+    this.discs = this.discs.filter((d) => now < d.expiresAt);
   }
 
   _applyOneShot(p, fx, now) {
@@ -677,6 +712,7 @@ export class Game {
       this._applyMagnets(dt);
       this._mallenLogic(now);
       this._updateCorgis(dt, now);
+      this._updateDiscGolf(dt, now);
       this._checkCarriedDeliveries();
       this._capTubs();
       this._checkRoundEnd();
@@ -974,6 +1010,7 @@ export class Game {
     this._truckRefillQueue = [];
     this.presents = [];
     this.corgis = [];
+    this.discs = [];
     this._nextPresentAt = null;
     this._stockTruck();
     this.events.push({ type: 'roundStart', n: this.roundNumber });
@@ -1016,6 +1053,7 @@ export class Game {
       corgis: this.corgis.map(c => ({
         id: c.id, x: Math.round(c.x), y: Math.round(c.y), dir: c.dir,
       })),
+      discs: this.discs.map(d => ({ id: d.id, x: Math.round(d.x), y: Math.round(d.y) })),
     };
   }
 }

@@ -180,6 +180,17 @@ export const FX = {
   INTERSTITIAL: 'interstitial',  // debuff: forced full-screen ad; you're stunned ~3s
   GOLDEN_CURD: 'golden_curd',    // buff: instant +1 point with a big celebration (brief freeze)
   CORGI_ATTACK: 'corgi_attack',  // buff: spawns a corgi that hunts and stuns everyone else
+  DISC_GOLF: 'disc_golf',        // buff: periodically flings frisbees that bonk + stun others
+};
+
+// Disc-golf buff: while active, the player periodically flings a spinning disc in a
+// random direction. A disc bonks any OTHER player it flies through with a brief stun.
+export const DISC = {
+  radius: 18,
+  minSpeed: 340, maxSpeed: 520,  // launch speed (randomized) -> distance
+  minLifeMs: 850, maxLifeMs: 1450,
+  spawnIntervalMs: 650,          // a new disc roughly this often while the buff lasts
+  stunMs: 1300,                  // brief stun on hitting another player
 };
 
 // The corgi spawned by the CORGI_ATTACK buff: a fast NPC that wanders, charges any
@@ -206,6 +217,7 @@ export const BUFF_POOL = [
   { fx: FX.CURD_CANNON,  w: 2 },
   { fx: FX.GOLDEN_CURD,  w: 2 },
   { fx: FX.CORGI_ATTACK, w: 2 },
+  { fx: FX.DISC_GOLF,    w: 2 },
 ];
 export const DEBUFF_POOL = [
   { fx: FX.HALF_SPEED, w: 3 },

@@ -525,6 +525,31 @@ test('presents never land on top of the truck or fridge', () => {
   }
 });
 
+test('disc golf flings discs that stun others but never the owner', () => {
+  assert.ok(BUFF_POOL.some(e => e.fx === FX.DISC_GOLF), 'disc golf is a buff');
+  assert.ok(!ONE_SHOT.has(FX.DISC_GOLF), 'disc golf is a duration buff, not one-shot');
+  const g = newGame();
+  const owner = g.addPlayer('owner');
+  const victim = g.addPlayer('victim');
+  g.startRound();
+  advance(g, 3200);
+  const now = g._clock;
+  const o = g.players.get(owner), v = g.players.get(victim);
+  o.x = 800; o.y = 800; v.x = 1200; v.y = 800;        // victim far, won't catch random discs
+  o.effect = FX.DISC_GOLF; o.effectUntilMs = now + 6000; o.nextDiscAt = now;
+  advance(g, 300);
+  assert.ok(g.discs.length >= 1, 'discs are being flung');
+  // a disc parked on the victim stuns them
+  g.discs.push({ id: 9001, x: v.x, y: v.y, vx: 0, vy: 0, ownerId: owner, expiresAt: g._clock + 1000, hit: new Set() });
+  advance(g, 50);
+  assert.ok(g.players.get(victim).stunnedUntilMs > g._clock, 'victim bonked');
+  // a disc parked on the owner never stuns them
+  const ownerBefore = g.players.get(owner).stunnedUntilMs;
+  g.discs.push({ id: 9002, x: o.x, y: o.y, vx: 0, vy: 0, ownerId: owner, expiresAt: g._clock + 1000, hit: new Set() });
+  advance(g, 50);
+  assert.equal(g.players.get(owner).stunnedUntilMs, ownerBefore, 'owner immune to own discs');
+});
+
 test('corgi expires after its lifespan', () => {
   const g = newGame();
   const id = g.addPlayer('owner');
