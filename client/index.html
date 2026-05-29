@@ -14,7 +14,8 @@
     html,
     body {
       margin: 0;
-      height: 100%;
+      height: 100vh;        /* fallback */
+      height: 100dvh;       /* iOS dynamic viewport — tracks URL bar collapse */
       overflow: hidden;
       background: #20301f;
       font-family: system-ui, sans-serif;

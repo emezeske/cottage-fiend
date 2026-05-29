@@ -130,9 +130,15 @@ function sendAim(x, y) {
 }
 
 // Fill the whole screen; render at devicePixelRatio (capped) for crisp pixels.
+// Prefer visualViewport.* over innerWidth/innerHeight because on iPad Safari /
+// Chrome the layout viewport (innerHeight) doesn't update when the URL bar
+// collapses or when a stuck pinch-zoom shrinks the visible area — which left
+// the canvas pinned to the wrong size, with the body color showing below it.
 function fitCanvas() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = window.innerWidth, h = window.innerHeight;
+  const vv = window.visualViewport;
+  const w = vv ? vv.width  : window.innerWidth;
+  const h = vv ? vv.height : window.innerHeight;
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
   canvas.style.width = w + 'px';
@@ -140,6 +146,24 @@ function fitCanvas() {
 }
 window.addEventListener('resize', fitCanvas);
 window.addEventListener('orientationchange', fitCanvas);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', fitCanvas);
+  window.visualViewport.addEventListener('scroll', fitCanvas);
+}
+
+// iPad Safari / Chrome ignores `user-scalable=no` and `touch-action: none` for
+// pinch-zoom (accessibility). Two thumbs (one on the joystick, one on the throw
+// button) can register as a pinch and zoom the page — leaving things stuck in a
+// half-zoomed state. iOS-specific gesture events only fire for pinch/rotate
+// (never for independent taps), so cancelling them at the document level blocks
+// the zoom without touching the joystick / button gestures.
+for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+}
+// belt-and-braces: a multi-touch touchmove with a non-1 scale is also a pinch
+document.addEventListener('touchmove', (e) => {
+  if (e.scale !== undefined && e.scale !== 1) e.preventDefault();
+}, { passive: false });
 
 function wsUrl() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
