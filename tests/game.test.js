@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { performance } from 'node:perf_hooks';
 import { Game, _resetIds } from '../server/game/game.js';
 import {
-  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL, BUFF_POOL, PRESENT,
+  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL, BUFF_POOL, PRESENT, TICK_MS,
 } from '../server/game/constants.js';
 import { seededRng } from './helpers.js';
 
@@ -692,4 +693,53 @@ test('double_speed is faster than half_speed (effects not swapped)', () => {
   const fast = step(FX.DOUBLE_SPEED);
   const slow = step(FX.HALF_SPEED);
   assert.ok(fast > slow, `double_speed (${fast}px) should exceed half_speed (${slow}px)`);
+});
+
+// Load floor: 20 players (max realistic party size + Mallen) running ~60s of
+// chaotic mixed-effect play must stay well under the 33ms tick budget. This
+// pins down the perf headroom so we notice if a future feature blows it up.
+test('load: 20 players churning effects keeps ticks well under the 33ms budget', () => {
+  const g = newGame();
+  const crew = [];
+  for (let i = 0; i < 19; i++) crew.push(g.addPlayer('crew' + i));
+  g.addPlayer('mallen');                       // 20th player — the Mallen AI runs on its own
+  g.setForcedPresent('');                      // random across the full buff/debuff pool
+  g.startRound();
+  advance(g, 3200);                            // out of the countdown -> PLAYING
+
+  const rng = seededRng(7);
+  const tickTimes = new Array(2000);
+  const snapBytes = [];
+  for (let i = 0; i < tickTimes.length; i++) {
+    const now = g._clock || 0;
+    // simulate realistic input churn: wiggle direction, fire actions occasionally
+    for (const id of crew) {
+      if (rng() < 0.12) { const a = rng() * Math.PI * 2; g.setInput(id, Math.cos(a), Math.sin(a)); }
+      if (rng() < 0.05) g.pickup(id, now);
+      if (rng() < 0.04) g.startCharge(id, now);
+      if (rng() < 0.04) g.release(id, now);
+      if (rng() < 0.05) g.punch(id, now);
+    }
+    const t0 = performance.now();
+    g.tick(TICK_MS);
+    tickTimes[i] = performance.now() - t0;
+    // sample the broadcast payload roughly once a second
+    if (i % 30 === 0) {
+      const snap = g.snapshot();
+      snapBytes.push(JSON.stringify({ type: 'state', snapshot: snap, events: g.drainEvents() }).length);
+    } else {
+      g.drainEvents();                         // don't let the queue balloon
+    }
+  }
+  tickTimes.sort((a, b) => a - b);
+  const avg = tickTimes.reduce((s, t) => s + t, 0) / tickTimes.length;
+  const p50 = tickTimes[Math.floor(tickTimes.length * 0.50)];
+  const p99 = tickTimes[Math.floor(tickTimes.length * 0.99)];
+  const maxT = tickTimes[tickTimes.length - 1];
+  const maxSnap = Math.max(...snapBytes);
+  console.log(`  20-player load: avg ${avg.toFixed(2)}ms  p50 ${p50.toFixed(2)}ms  p99 ${p99.toFixed(2)}ms  max ${maxT.toFixed(2)}ms  snap<=${maxSnap}B`);
+  // 33ms is the per-tick budget at 30Hz; demand serious headroom
+  assert.ok(avg < 5,    `avg tick ${avg.toFixed(2)}ms exceeds 5ms budget`);
+  assert.ok(p99 < 15,   `p99 tick ${p99.toFixed(2)}ms exceeds 15ms budget`);
+  assert.ok(maxSnap < 32 * 1024, `snapshot json ${maxSnap}B is too large to broadcast comfortably`);
 });
