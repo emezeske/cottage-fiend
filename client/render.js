@@ -656,8 +656,11 @@ function drawHUD(ctx, cssW, cssH, state, selfId) {
     if (w > maxW) maxW = w;
   }
   const lineH = 26, padX = 8;
+  const bx = 8, by = AD_H + 8;
+  const bw = maxW + padX * 2 + 8;
+  const bh = 16 + lineH * lines.length;
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(8, AD_H + 8, maxW + padX * 2 + 8, 16 + lineH * lines.length);
+  ctx.fillRect(bx, by, bw, bh);
 
   let y = AD_H + 28;
   for (const ln of lines) {
@@ -666,6 +669,43 @@ function drawHUD(ctx, cssW, cssH, state, selfId) {
     if (ln.icon && images.tub) { ctx.drawImage(images.tub, 16, y - iconSz + 2, iconSz, iconSz); tx = 16 + iconSz + 6; }
     ctx.fillText(ln.text, tx, y);
     y += lineH;
+  }
+
+  // mini-map to the right of the score box (square — the arena is square — and
+  // the same height), showing live positions; clamped so it stays on-screen
+  if (state.phase === PHASE.PLAYING || state.phase === PHASE.COUNTDOWN) {
+    const mmX = Math.min(bx + bw + 8, cssW - bh - 8);
+    drawMinimap(ctx, mmX, by, bh, state);
+  }
+}
+
+// A tiny live map: translucent panel with dots for the truck, fridge, players,
+// and the Mallen. World coords are scaled down to the panel.
+function drawMinimap(ctx, x, y, size, state) {
+  const arena = state.arena || { width: 1600, height: 1600 };
+  const sx = size / arena.width, sy = size / arena.height;
+  const mx = (wx) => x + wx * sx;
+  const my = (wy) => y + wy * sy;
+  const dot = (wx, wy, r, color) => {
+    ctx.beginPath();
+    ctx.arc(mx(wx), my(wy), r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(x, y, size, size);
+  ctx.strokeStyle = 'rgba(255,225,77,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+
+  if (state.loci) {
+    dot(state.loci.truck.x, state.loci.truck.y, 2.8, '#ffe14d');   // truck (yellow)
+    dot(state.loci.fridge.x, state.loci.fridge.y, 2.8, '#9ad7ff'); // fridge (blue)
+  }
+  for (const p of state.players || []) {
+    if (p.isMallen) dot(p.x, p.y, 3.6, '#ff4d6a');                 // Mallen (red, medium)
+    else dot(p.x, p.y, 2, PLAYER_COLORS[p.spriteIndex % PLAYER_COLORS.length]); // players (small)
   }
 }
 
