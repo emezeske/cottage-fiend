@@ -8,6 +8,9 @@ import { computeCamera, getCamera } from './camera.js';
 const PHASE = { LOBBY: 'lobby', COUNTDOWN: 'countdown', PLAYING: 'playing', LEADERBOARD: 'leaderboard' };
 
 export const AD_H = 70; // height of the top ad banner (CSS px); HUD sits below it
+// Bottom edge of the score HUD (updated each frame by drawHUD). Edge arrows clamp
+// below this so they never hide under the HUD. Defaults to the ad banner.
+let hudBottomY = AD_H;
 
 const EFFECT_LABELS = {
   double_speed: '⚡2X SPEED', two_x_points: '2X PTS', invincible: '🛡INVINCIBLE',
@@ -501,15 +504,15 @@ function edgeArrow(ctx, cssW, cssH, target, color, label, size) {
   const sx = target.x * cam.scale + cam.offX;
   const sy = target.y * cam.scale + cam.offY;
   const m = 30;
-  const left = m, right = cssW - m, top = AD_H + m, bottom = cssH - m;
+  const left = m, right = cssW - m, top = hudBottomY + m, bottom = cssH - m;
   if (sx >= left && sx <= right && sy >= top && sy <= bottom) return; // on-screen
 
-  const cx = cssW / 2, cy = (AD_H + cssH) / 2;
+  const cx = cssW / 2, cy = (hudBottomY + cssH) / 2;
   const ang = Math.atan2(sy - cy, sx - cx);
   const px = Math.max(left, Math.min(right, sx));
   let py = Math.max(top, Math.min(bottom, sy));
-  // never let the arrow (or its label above it) ride up under the top ad banner
-  py = Math.max(py, AD_H + size + (label ? 24 : 4));
+  // never let the arrow (or its label above it) ride up under the HUD
+  py = Math.max(py, hudBottomY + size + (label ? 24 : 4));
 
   ctx.save();
   ctx.translate(px, py);
@@ -659,6 +662,7 @@ function drawHUD(ctx, cssW, cssH, state, selfId) {
   const bx = 8, by = AD_H + 8;
   const bw = maxW + padX * 2 + 8;
   const bh = 16 + lineH * lines.length;
+  hudBottomY = by + bh; // edge arrows clamp below this
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(bx, by, bw, bh);
 
