@@ -15,7 +15,7 @@ let hudBottomY = AD_H;
 const EFFECT_LABELS = {
   double_speed: '⚡2X SPEED', two_x_points: '2X PTS', invincible: '🛡INVINCIBLE',
   magnet: '🧲MAGNET', curd_cannon: '🚀CURD CANNON: MEGA THROW',
-  half_speed: '🐌HALF SPEED', backwards: '🔄BACKWARDS', greased: '🧈GREASED',
+  half_speed: '🐌HALF SPEED', backwards: '🔄BACKWARDS', greased: '🧈BUTTERFINGERS',
   tiny: '🔬TINY', blindness: '🫥CURD BLIND', banana: '🍌SLIDEY',
   disc_golf: '🥏DISC GOLF',
 };
@@ -317,15 +317,7 @@ export function render(ctx, canvas, state, selfId, charge) {
     }
   }
 
-  // tubs (ready/loose/flying — carried are drawn with their player)
-  for (const t of tubs) {
-    if (t.state === 'carried') continue;
-    if (t.state === 'flying' && Math.random() < 0.35) addSplat(t.x, t.y); // splat trail in flight
-    drawSprite(ctx, images.tub, t.x, t.y, 36, 36);
-    if (!images.tub) fallbackCircle(ctx, t.x, t.y, 15, '#f2f0e0');
-  }
-
-  // splatters (under players)
+  // splatters (under everything — they're a trail/ground layer)
   for (let i = splats.length - 1; i >= 0; i--) {
     const s = splats[i];
     s.t += 16;
@@ -338,6 +330,15 @@ export function render(ctx, canvas, state, selfId, charge) {
     drawSprite(ctx, images[`splat_${s.frame}`], s.x, s.y, sz, sz);
     ctx.globalAlpha = 1;
     if (age >= s.life) splats.splice(i, 1);
+  }
+
+  // tubs (ready/loose/flying — carried are drawn with their player).
+  // Drawn AFTER splats so a flying tub reads on top of its own trail.
+  for (const t of tubs) {
+    if (t.state === 'carried') continue;
+    if (t.state === 'flying' && Math.random() < 0.35) addSplat(t.x, t.y); // splat trail in flight
+    drawSprite(ctx, images.tub, t.x, t.y, 36, 36);
+    if (!images.tub) fallbackCircle(ctx, t.x, t.y, 15, '#f2f0e0');
   }
 
   // walk frame: time-based (framerate-independent) and slower than before
@@ -549,10 +550,11 @@ function drawPlayer(ctx, p, frame, isSelf) {
   // dance lights wash over the host AND every dancer (behind the sprite)
   if (danceParty) drawDanceLights(ctx, px, cy, size, tnow);
 
+  // dance bob/sway is reused by the Mallen face so his head dances with the body
+  const danceBob = dancing ? Math.abs(Math.sin(tnow / 130)) * size * 0.16 : 0;
+  const danceSway = dancing ? Math.sin(tnow / 190) * size * 0.11 : 0;
   if (dancing) {
-    const bob = Math.abs(Math.sin(tnow / 130)) * size * 0.16;  // bounce up to the beat
-    const sway = Math.sin(tnow / 190) * size * 0.11;           // sway side to side
-    drawSprite(ctx, img, px + sway, cy - bob, size, size);
+    drawSprite(ctx, img, px + danceSway, cy - danceBob, size, size);
   } else if (car) {
     drawSprite(ctx, car, px, p.y, size * 1.9, size * 1.9); // centered on the player
   } else if (p.stunned && !golden) {
@@ -591,18 +593,21 @@ function drawPlayer(ctx, p, frame, isSelf) {
   }
 
   // The Mallen's real face, bobblehead-style over the demon's head — fiend face
-  // during frenzy, mirrored by facing, with a little bob while walking.
+  // during frenzy, mirrored by facing, with a little bob while walking. When
+  // he's dancing, the face rides the body's bob/sway; when he's a Ferrari, it
+  // perches on the cabin instead of way up over the (absent) head.
   if (p.isMallen) {
     const face = p.frenzy ? images.mallen_face_fiend : images.mallen_face;
     if (face) {
       const faceH = size * 0.62;
       const faceW = faceH * (face.width / face.height);
-      const bob = p.moving ? Math.sin(tnow / 110) * size * 0.05 : 0;
+      const walkBob = p.moving ? Math.sin(tnow / 110) * size * 0.05 : 0;
       const faceDx = size * 0.12;  // face sits left of center; nudge it right
-      // when he's a Ferrari, perch the face above the car instead of over the head
-      const faceY = car ? (p.y - size * 0.95 + bob) : (cy - size * 0.32 + bob);
+      const faceY = car
+        ? (p.y - size * 0.50 + walkBob)    // perched on the Ferrari's cabin
+        : (cy - size * 0.32 + walkBob - danceBob);
       ctx.save();
-      ctx.translate(p.x + faceDx, faceY);
+      ctx.translate(p.x + faceDx + danceSway, faceY);
       if (p.dir.x < 0) ctx.scale(-1, 1);   // mirror when facing left
       ctx.drawImage(face, -faceW / 2, -faceH / 2, faceW, faceH);
       ctx.restore();
