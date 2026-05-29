@@ -437,6 +437,20 @@ test('presents roll varied effects within a round', () => {
 
 // Regression: double_speed must speed you up and half_speed slow you down — i.e.
 // the two effects (and the sounds keyed off their ids) are not swapped.
+test('setForcedPresent overrides the random roll (admin testing)', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.setForcedPresent('banana');
+  const p = g.players.get(id);
+  g._applyPresent(p, 0);
+  assert.equal(p._lastFx, 'banana');
+  assert.equal(p.effect, 'banana');
+  g.setForcedPresent('random');     // back to random
+  assert.equal(g.forcedFx, null);
+  g.setForcedPresent('not_a_real_fx'); // invalid is ignored
+  assert.equal(g.forcedFx, null);
+});
+
 test('interstitial ad is a one-shot debuff that stuns the claimer for ~3s', () => {
   assert.ok(ONE_SHOT.has(FX.INTERSTITIAL), 'interstitial is a one-shot');
   assert.ok(DEBUFF_POOL.some(e => e.fx === FX.INTERSTITIAL), 'interstitial is a debuff');

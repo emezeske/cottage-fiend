@@ -10,6 +10,7 @@ import {
 } from './constants.js';
 
 const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SFX
+const FX_VALUES = new Set(Object.values(FX));            // valid effect ids (admin force-present)
 import { dist, normalize, resolveCircleOverlap, clampToArena, chargePower } from './vec.js';
 import { placeLoci, randSpawn } from './spawn.js';
 import { rollEffect } from './effects.js';
@@ -44,6 +45,13 @@ export class Game {
     this._nextPresentAt = null; // clock time of next present spawn (null = unscheduled)
     this.roundNumber = 0;       // increments each round (for the ROUND N intro)
     this._firstScored = false;  // has anyone scored yet this round (for FIRST CURD)
+    this.forcedFx = null;       // admin testing: force every present to this effect (null = random)
+  }
+
+  // Admin/testing: force every claimed present to roll a specific effect, or pass
+  // a falsy/'random'/invalid value to restore normal random rolls.
+  setForcedPresent(fx) {
+    this.forcedFx = FX_VALUES.has(fx) ? fx : null;
   }
 
   // Emit the global FIRST CURD cue the first time anyone scores in a round.
@@ -394,7 +402,7 @@ export class Game {
   }
 
   _applyPresent(p, now) {
-    const fx = rollEffect(p.isMallen, this.rng);
+    const fx = this.forcedFx || rollEffect(p.isMallen, this.rng);
     p._lastFx = fx;
     if (ONE_SHOT.has(fx)) {
       this._applyOneShot(p, fx, now);

@@ -17,7 +17,10 @@
   a small { display: block; font-weight: 400; opacity: 0.7; }
   button { font-size: 18px; font-weight: 800; padding: 12px 22px; border-radius: 10px;
     border: 4px solid #1e1814; background: #ff5d5d; color: #fff; cursor: pointer; }
-  #status { margin-left: 12px; color: #9ef; }
+  #status, #forceStatus { margin-left: 12px; color: #9ef; }
+  select { font-size: 16px; padding: 8px 10px; border-radius: 8px; border: 3px solid #1e1814;
+    background: #ffe14d; color: #1e1814; font-weight: 700; }
+  label { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -35,6 +38,35 @@
   <p class="sub">Preview screens use fake data and don't connect to the server, so they
      won't disturb a live game.</p>
 
+  <h2>Testing</h2>
+  <label for="forcePresent">Force every present to be:</label>
+  <select id="forcePresent">
+    <option value="random">🎲 Random (normal)</option>
+    <optgroup label="Buffs">
+      <option value="double_speed">⚡ 2× Speed</option>
+      <option value="two_x_points">✨ 2× Points</option>
+      <option value="invincible">🛡 Invincible</option>
+      <option value="explosion">💥 Explosion</option>
+      <option value="magnet">🧲 Magnet</option>
+      <option value="curd_cannon">🚀 Curd Cannon</option>
+    </optgroup>
+    <optgroup label="Debuffs">
+      <option value="half_speed">🐌 Half Speed</option>
+      <option value="backwards">🔄 Backwards</option>
+      <option value="greased">🧈 Greased</option>
+      <option value="tiny">🔬 Tiny</option>
+      <option value="blindness">🫥 Blindness</option>
+      <option value="banana">🍌 Slidey</option>
+      <option value="interstitial">📺 Ad Break</option>
+    </optgroup>
+    <optgroup label="Wildcards">
+      <option value="swap">🔀 Swap</option>
+      <option value="pinata">🎊 Piñata</option>
+    </optgroup>
+  </select>
+  <span id="forceStatus"></span>
+  <p class="sub">Applies to newly claimed presents immediately, for everyone. Persists across RESET.</p>
+
   <h2>Server</h2>
   <button id="reset">RESET SERVER STATE</button>
   <span id="status"></span>
@@ -42,6 +74,19 @@
      refresh to rejoin.</p>
 
   <script>
+    const force = document.getElementById('forcePresent');
+    const forceStatus = document.getElementById('forceStatus');
+    // sync the dropdown with whatever the server is currently forcing
+    fetch('/admin/force-present').then(r => r.text()).then(v => { if (v) force.value = v; }).catch(() => {});
+    force.onchange = async () => {
+      try {
+        const r = await fetch('/admin/force-present?fx=' + encodeURIComponent(force.value), { method: 'POST' });
+        forceStatus.textContent = await r.text();
+      } catch (e) {
+        forceStatus.textContent = 'failed: ' + e;
+      }
+    };
+
     document.getElementById('reset').onclick = async () => {
       if (!confirm('Reset the entire server state? Everyone gets kicked.')) return;
       try {

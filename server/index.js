@@ -32,10 +32,26 @@ const httpServer = http.createServer((req, res) => {
   // --- admin (no auth — it's a joke game) ---
   if (urlPath === '/admin/reset' && req.method === 'POST') { // POST-only so a stray GET can't wipe state
     game = new Game();                       // wipe all state
+    game.setForcedPresent(forcedPresent);    // keep the testing override across a reset
     for (const ws of sockets.values()) { try { ws.close(); } catch {} } // kick clients to rejoin fresh
     sockets.clear();
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('server reset — players must refresh to rejoin');
+    return;
+  }
+  // testing: force every present to a specific effect. POST ?fx=banana (or fx=random/empty
+  // to clear); GET returns the current setting so the admin dropdown can sync.
+  if (urlPath === '/admin/force-present') {
+    if (req.method === 'POST') {
+      const fx = new URL(req.url, 'http://x').searchParams.get('fx') || '';
+      game.setForcedPresent(fx);
+      forcedPresent = game.forcedFx || '';   // store the validated value (persists across reset)
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(forcedPresent ? `forcing every present: ${forcedPresent}` : 'presents are random again');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end(forcedPresent);
     return;
   }
   if (urlPath === '/admin') urlPath = '/admin.html';
@@ -56,6 +72,7 @@ const httpServer = http.createServer((req, res) => {
 
 // --- game + websockets ------------------------------------------------------
 let game = new Game();
+let forcedPresent = '';  // admin testing: effect id every present rolls ('' = random)
 const wss = new WebSocketServer({ server: httpServer });
 const sockets = new Map(); // id -> ws
 
