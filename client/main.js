@@ -23,6 +23,8 @@ const actionBtn = document.getElementById('actionBtn');
 
 let ws = null;
 let selfId = null;
+let playerName = null;          // remembered so we can auto-rejoin after a drop
+let reconnectAttempts = 0;
 let state = null;
 let prevPos = {};   // last-snapshot positions per player id, to detect movement
 let invLoopOn = false; // is the local invincibility theme looping
@@ -77,8 +79,9 @@ function wsUrl() {
 }
 
 function connect(name) {
+  playerName = name;
   ws = new WebSocket(wsUrl());
-  ws.onopen = () => ws.send(JSON.stringify({ type: MSG.JOIN, name }));
+  ws.onopen = () => { reconnectAttempts = 0; ws.send(JSON.stringify({ type: MSG.JOIN, name: playerName })); };
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     if (m.type === MSG.WELCOME) { selfId = m.id; }
@@ -140,8 +143,18 @@ function connect(name) {
       updateButtons();
     }
   };
-  ws.onclose = () => { overlay.style.display = 'flex';
-    document.getElementById('status').textContent = 'Disconnected. Refresh to rejoin.'; };
+  ws.onclose = () => {
+    // Auto-reconnect: a Wi-Fi blip or the phone backgrounding shouldn't kick you
+    // for good. Keep retrying (~30s) and rejoin with the same name; only fall back
+    // to the manual-refresh overlay if the server is truly gone.
+    if (reconnectAttempts < 30) {
+      reconnectAttempts++;
+      setTimeout(() => connect(playerName), 1000);
+    } else {
+      overlay.style.display = 'flex';
+      document.getElementById('status').textContent = 'Disconnected. Refresh to rejoin.';
+    }
+  };
 }
 
 function send(type, extra = {}) {

@@ -60,13 +60,33 @@ test('removePlayer drops carried tub as loose', () => {
   assert.equal(g.tubs[0].state, 'loose');
 });
 
-test('removing the mallen promotes another mallen-named player', () => {
+test('only one Mallen — a second "mallen" joins as a delivery player', () => {
   const g = newGame();
   const a = g.addPlayer('mallen');
   const b = g.addPlayer('mallen');
   assert.equal(g.mallenId, a);
+  assert.equal(g.players.get(a).isMallen, true);
+  assert.equal(g.players.get(b).isMallen, false); // not a dead-weight duplicate Mallen
   g.removePlayer(a);
-  assert.equal(g.mallenId, b);
+  assert.equal(g.mallenId, null); // no other Mallen to promote
+});
+
+test('startRound drafts a Mallen when nobody claimed one (2+ players)', () => {
+  const g = newGame();
+  g.addPlayer('alice');
+  g.addPlayer('bob');
+  assert.equal(g.mallenId, null);
+  g.startRound();
+  assert.notEqual(g.mallenId, null);
+  assert.equal(g.players.get(g.mallenId).isMallen, true);
+});
+
+test('startRound does NOT draft a Mallen for a lone player (solo stays delivery)', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound();
+  assert.equal(g.mallenId, null);
+  assert.equal(g.players.get(id).isMallen, false);
 });
 
 test('tapping a ready tub on the truck picks it up', () => {

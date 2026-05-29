@@ -390,10 +390,14 @@ function drawPlayer(ctx, p, frame, isSelf) {
   if (p.dashing) addDashTrail(p.x, cy, size * 0.42);
 
   if (p.stunned) {
-    ctx.save();
-    ctx.shadowColor = `hsl(${(tnow * 0.8) % 360},100%,62%)`; // rapid color flash
-    ctx.shadowBlur = 22;
+    // A Mallen chomp can stun ~everyone at once, so avoid shadowBlur here (it's a
+    // brutal per-sprite mobile GPU cost when many are stunned) — use a cheap
+    // hue-cycling ring + the existing flicker/jitter instead.
     drawSprite(ctx, img, px, cy + (Math.random() - 0.5) * 4, size, size);
+    ctx.save();
+    ctx.strokeStyle = `hsl(${(tnow * 0.8) % 360},100%,62%)`; // rapid color flash
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(px, p.y, p.radius + 6, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   } else if (p.isMallen && p.frenzy) {
     ctx.save();

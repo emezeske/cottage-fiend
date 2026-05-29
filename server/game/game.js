@@ -56,7 +56,9 @@ export class Game {
   // ---- lifecycle ----------------------------------------------------------
   addPlayer(name) {
     const id = _nextId++;
-    const isMallen = name.trim().toLowerCase() === MALLEN.name;
+    // Only ONE Mallen: a second person typing "mallen" joins as a normal delivery
+    // player (otherwise they'd be a dead-weight character that can't eat/score/win).
+    const isMallen = name.trim().toLowerCase() === MALLEN.name && this.mallenId == null;
     const spawn = randSpawn(ARENA, LOCI.edgePadding, this.rng);
     const p = {
       id, name,
@@ -545,6 +547,7 @@ export class Game {
       this._applyMagnets(dt);
       this._mallenLogic(now);
       this._checkCarriedDeliveries();
+      this._capTubs();
       this._checkRoundEnd();
     }
   }
@@ -807,9 +810,35 @@ export class Game {
     return ready / this.players.size >= ROUND.readyFraction;
   }
 
+  // Guarantee an antagonist: if nobody claimed the Mallen (and we have a crew to
+  // play against), draft a player into the role so the round isn't Mallen-less.
+  // Skipped for a lone player so solo testing still works as a delivery player.
+  _ensureMallen() {
+    if (this.players.get(this.mallenId)) return; // already have a live Mallen
+    this.mallenId = null;
+    if (this.players.size < 2) return;           // 1 player: leave them as delivery
+    let pick = null;
+    for (const p of this.players.values()) { if (p.isMallen) { pick = p; break; } }
+    if (!pick) for (const p of this.players.values()) { pick = p; break; } // draft the first
+    if (pick) { pick.isMallen = true; this.mallenId = pick.id; }
+  }
+
+  // Safety valve against unbounded tub growth (piñatas, misses, fast present rate
+  // with many players): cull the oldest LOOSE tubs past a generous cap. Active
+  // tubs (ready/carried/flying) are never culled.
+  _capTubs() {
+    const MAX_LOOSE = 24;
+    const loose = this.tubs.filter(t => t.state === 'loose');
+    if (loose.length <= MAX_LOOSE) return;
+    const cull = new Set(loose.sort((a, b) => a.id - b.id)
+      .slice(0, loose.length - MAX_LOOSE).map(t => t.id));
+    this.tubs = this.tubs.filter(t => !cull.has(t.id));
+  }
+
   startRound() {
     this.roundNumber += 1;
     this._firstScored = false;
+    this._ensureMallen();
     this.loci = placeLoci(ARENA, LOCI, this.rng);
     this._computeSafeZone();
     this.tubs = [];

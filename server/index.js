@@ -14,6 +14,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIR = path.join(__dirname, '..', 'client');
 const PORT = process.env.PORT || 8080;
 
+// Last-resort safety net: for a disposable party game, staying up beats crashing.
+// The per-tick and per-message try/catch handle the expected paths; this catches
+// anything that slips through (e.g. a socket send error) without exiting.
+process.on('uncaughtException', (err) => console.error('uncaughtException:', err));
+process.on('unhandledRejection', (err) => console.error('unhandledRejection:', err));
+
 // --- static file server for the client ------------------------------------
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -63,66 +69,92 @@ function broadcast(obj) {
 
 wss.on('connection', (ws) => {
   let playerId = null;
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; }); // heartbeat: client answered our ping
 
   ws.on('message', (raw) => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
-    const now = game._clock || 0;
-
-    switch (m.type) {
-      case MSG.JOIN: {
-        const name = (m.name || 'delivery').toString().slice(0, 16);
-        playerId = game.addPlayer(name);
-        sockets.set(playerId, ws);
-        send(ws, MSG.WELCOME, { id: playerId });
-        // if we're idling in lobby with players, kick a round when ready
-        break;
+    // A bug handling one player's input must never take the whole party down.
+    try {
+      const now = game._clock || 0;
+      switch (m.type) {
+        case MSG.JOIN: {
+          const name = (m.name || 'delivery').toString().slice(0, 16);
+          playerId = game.addPlayer(name);
+          sockets.set(playerId, ws);
+          send(ws, MSG.WELCOME, { id: playerId });
+          // if we're idling in lobby with players, kick a round when ready
+          break;
+        }
+        case MSG.INPUT:
+          if (playerId) game.setInput(playerId, m.x || 0, m.y || 0);
+          break;
+        case MSG.PICKUP:
+          if (playerId) game.pickup(playerId, now);
+          break;
+        case MSG.CHARGE:
+          if (playerId) game.startCharge(playerId, now);
+          break;
+        case MSG.RELEASE:
+          if (playerId) game.release(playerId, now);
+          break;
+        case MSG.PUNCH:
+          if (playerId) game.punch(playerId, now);
+          break;
+        case MSG.READY:
+          if (playerId) game.setReady(playerId);
+          break;
       }
-      case MSG.INPUT:
-        if (playerId) game.setInput(playerId, m.x || 0, m.y || 0);
-        break;
-      case MSG.PICKUP:
-        if (playerId) game.pickup(playerId, now);
-        break;
-      case MSG.CHARGE:
-        if (playerId) game.startCharge(playerId, now);
-        break;
-      case MSG.RELEASE:
-        if (playerId) game.release(playerId, now);
-        break;
-      case MSG.PUNCH:
-        if (playerId) game.punch(playerId, now);
-        break;
-      case MSG.READY:
-        if (playerId) game.setReady(playerId);
-        break;
+    } catch (err) {
+      console.error('message handler error:', err);
     }
   });
 
+  ws.on('error', () => { try { ws.terminate(); } catch {} }); // don't let a socket error bubble up
   ws.on('close', () => {
     if (playerId) { game.removePlayer(playerId); sockets.delete(playerId); }
   });
 });
 
+// Heartbeat: ping every 15s; a socket that misses two cycles (dead/backgrounded
+// phone that never sent a clean close) is terminated so it stops being a ghost
+// player inflating the "ready" count.
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) { try { ws.terminate(); } catch {} continue; }
+    ws.isAlive = false;
+    try { ws.ping(); } catch {}
+  }
+}, 15000);
+wss.on('close', () => clearInterval(heartbeat));
+
 // --- tick loop --------------------------------------------------------------
 let last = Date.now();
 setInterval(() => {
-  const now = Date.now();
-  const dt = now - last;
-  last = now;
+  // One bad tick must not crash the server and kick all 12 players.
+  try {
+    const now = Date.now();
+    // clamp dt: a GC pause / CPU spike shouldn't fast-forward the sim and teleport
+    // everyone across the arena in a single giant step.
+    const dt = Math.min(now - last, 100);
+    last = now;
 
-  game.tick(dt);
+    game.tick(dt);
 
-  // lobby/leaderboard -> start a round when enough players are ready
-  if ((game.phase === PHASE.LOBBY || game.phase === PHASE.LEADERBOARD)) {
-    if (game.players.size > 0 && game.readyFractionMet()) {
-      game.startRound();
+    // lobby/leaderboard -> start a round when enough players are ready
+    if ((game.phase === PHASE.LOBBY || game.phase === PHASE.LEADERBOARD)) {
+      if (game.players.size > 0 && game.readyFractionMet()) {
+        game.startRound();
+      }
     }
-  }
 
-  // broadcast snapshot + drained events
-  const events = game.drainEvents();
-  broadcast({ type: MSG.STATE, snapshot: game.snapshot(), events });
+    // broadcast snapshot + drained events
+    const events = game.drainEvents();
+    broadcast({ type: MSG.STATE, snapshot: game.snapshot(), events });
+  } catch (err) {
+    console.error('tick error:', err);
+  }
 }, TICK_MS);
 
 // Non-internal IPv4 addresses, so you can open the game from a phone on the LAN.
