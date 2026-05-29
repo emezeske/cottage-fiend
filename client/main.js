@@ -261,6 +261,19 @@ joinBtn.onclick = () => {
 };
 nameInput.addEventListener('input', updateJoinEnabled);
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.click(); });
+
+// Audio can't autoplay, so the title theme can't start on its own while the
+// title overlay is showing. Kick it off on the player's first interaction with
+// the title screen (tap or keypress) — that gesture unlocks audio.
+let audioPrimed = false;
+function primeTitleAudio() {
+  if (audioPrimed) return;
+  audioPrimed = true;
+  initAudio();
+  setMusic('title');
+}
+overlay.addEventListener('pointerdown', primeTitleAudio);
+nameInput.addEventListener('keydown', primeTitleAudio);
 goBtn.onclick = () => { initAudio(); send(MSG.READY); };
 
 let lastActionMode = null;

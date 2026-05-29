@@ -74,6 +74,15 @@ export function initAudio() {
   if (ctx) return;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   if (ctx.state === 'suspended') ctx.resume(); // we're inside a user gesture (join/ready)
+  // iOS/Safari needs an actual sound played during the unlocking gesture or the
+  // context stays effectively muted for later (async) audio like the music. A
+  // silent one-sample blip fully unlocks it.
+  try {
+    const s = ctx.createBufferSource();
+    s.buffer = ctx.createBuffer(1, 1, 22050);
+    s.connect(ctx.destination);
+    s.start(0);
+  } catch {}
   for (const [evt, file] of Object.entries(FILE_SOUNDS))
     loadClip(url_sound(file)).then((buf) => { buffers[evt] = buf; }).catch(() => {});
   for (const [name, file] of Object.entries(SFX_FILES))
