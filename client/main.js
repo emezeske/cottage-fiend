@@ -187,6 +187,7 @@ function connect(name) {
         if (e.type === 'roundStart') playSound('round');
         // local SFX (only the affected player hears)
         if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId && !firstCurd) playSound('score');
+        if (e.type === 'dominating' && e.id === selfId) playSound('dominating'); // you're 5+ ahead
         // golden curd: a global celebration — everyone sees the animation and hears it
         if (e.type === 'presentClaim' && e.fx === 'golden_curd') { playSound('golden_curd'); addGoldenCurd(e.id); }
         else if (e.type === 'presentClaim' && e.id === selfId) playSound(e.fx); // local per-effect sound

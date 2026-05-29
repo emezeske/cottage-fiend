@@ -26,6 +26,7 @@ needed. Keep filenames exactly as listed.
 | `sfx_round_over.mp3` | A **round ends** (the leaderboard "round over" sting) | **Global** |
 | `sfx_score.mp3` | **You score** — a delivery player delivering a tub to the fridge, or the Mallen devouring a tub | **Local** — only the scorer |
 | `sfx_ad_1.mp3` / `_2` / `_3` | **You tap the top ad banner** — one of the three is picked at random | **Local** — only the tapper |
+| `sfx_dominating.mp3` | You pull **5+ points ahead** of the next-best crew member (fires once per lead) | **Local** — only the leader |
 
 Presents play a **per-effect** sound (see the next section) instead of one generic powerup/curse cue.
 

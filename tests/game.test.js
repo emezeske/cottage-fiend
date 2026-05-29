@@ -525,6 +525,28 @@ test('presents never land on top of the truck or fridge', () => {
   }
 });
 
+test('dominating cue fires once (for the leader) when 5+ points ahead', () => {
+  const g = newGame();
+  const a = g.addPlayer('alice');
+  const b = g.addPlayer('bob');
+  g.startRound();
+  advance(g, 3200);
+  g.drainEvents();
+  // alice pulls to a 4-point lead: not dominating yet
+  g.players.get(a).score = 4; g.players.get(b).score = 0;
+  advance(g, 33);
+  assert.ok(!g.drainEvents().some(e => e.type === 'dominating'), 'no cue at +4');
+  // 5-point lead: fires once, for alice
+  g.players.get(a).score = 5;
+  advance(g, 33);
+  let evs = g.drainEvents().filter(e => e.type === 'dominating');
+  assert.equal(evs.length, 1, 'one cue at +5');
+  assert.equal(evs[0].id, a, 'cue is for the leader');
+  // still dominating next tick -> does not re-fire
+  advance(g, 33);
+  assert.ok(!g.drainEvents().some(e => e.type === 'dominating'), 'no repeat while still ahead');
+});
+
 test('disc golf flings discs that stun others but never the owner', () => {
   assert.ok(BUFF_POOL.some(e => e.fx === FX.DISC_GOLF), 'disc golf is a buff');
   assert.ok(!ONE_SHOT.has(FX.DISC_GOLF), 'disc golf is a duration buff, not one-shot');

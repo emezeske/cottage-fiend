@@ -16,6 +16,7 @@ const SFX_FILES = {
   firstCurd: 'sfx_first_curd.mp3', // global: first score of the round
   round: 'sfx_round.mp3',        // global: round start
   score: 'sfx_score.mp3',        // local: you scored
+  dominating: 'sfx_dominating.mp3', // local: you pulled 5+ points ahead
   ad1: 'sfx_ad_1.mp3',           // local: tapped the top ad banner (one of 3 picked at random)
   ad2: 'sfx_ad_2.mp3',
   ad3: 'sfx_ad_3.mp3',

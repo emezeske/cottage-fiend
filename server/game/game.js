@@ -53,6 +53,22 @@ export class Game {
     this._corgiSeq = 1;
     this.discs = [];            // active DISC_GOLF projectiles
     this._discSeq = 1;
+    this._dominating = false;   // has the current 5+ point lead already been announced
+  }
+
+  // Fire a one-shot "dominating" cue (local to the leader) the first time a crew
+  // member pulls 5+ points ahead of the next-best crew member.
+  _checkDominating() {
+    const crew = [...this.players.values()].filter(p => !p.isMallen);
+    if (crew.length < 2) { this._dominating = false; return; }
+    crew.sort((a, b) => b.score - a.score);
+    const lead = crew[0].score - crew[1].score;
+    if (lead >= 5 && !this._dominating) {
+      this._dominating = true;
+      this.events.push({ type: 'dominating', id: crew[0].id });
+    } else if (lead < 5) {
+      this._dominating = false;
+    }
   }
 
   // Admin/testing: force every claimed present to roll a specific effect, or pass
@@ -715,6 +731,7 @@ export class Game {
       this._updateDiscGolf(dt, now);
       this._checkCarriedDeliveries();
       this._capTubs();
+      this._checkDominating();
       this._checkRoundEnd();
     }
   }
@@ -991,6 +1008,7 @@ export class Game {
     this.loci = placeLoci(ARENA, LOCI, this.rng);
     this._computeSafeZone();
     this.tubs = [];
+    this._dominating = false;
     this.roundWinner = null;
     for (const p of this.players.values()) {
       const s = randSpawn(ARENA, LOCI.edgePadding, this.rng);
