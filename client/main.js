@@ -22,6 +22,8 @@ const goBtn = document.getElementById('goBtn');
 const actionBtn = document.getElementById('actionBtn');
 const audioUnlockModal = document.getElementById('audioUnlockModal');
 const audioUnlockPlayer = document.getElementById('audioUnlockPlayer');
+const adInterstitial = document.getElementById('adInterstitial');
+const adSkip = document.getElementById('adSkip');
 
 let ws = null;
 let selfId = null;
@@ -45,6 +47,41 @@ audioUnlockModal.addEventListener('click', (e) => {
   initAudio();
   hideAudioUnlockModal();
 }, { once: true });
+
+// Forced ad-break debuff: a full-screen interstitial whose SKIP button stays
+// grayed for 3s (YouTube-pre-roll style). The server stuns the claimer for the
+// same 3s, so they're frozen and vulnerable while it plays.
+let adShowing = false;
+let adSkipReady = false;
+let adTimer = null;
+function showInterstitial() {
+  if (adShowing) return;
+  adShowing = true;
+  adInterstitial.style.display = 'flex';
+  playSound(['ad1', 'ad2', 'ad3'][Math.random() * 3 | 0]); // the (very important) jingle
+  adSkipReady = false;
+  adSkip.disabled = true;
+  let remaining = 3;
+  adSkip.textContent = `Skip in ${remaining}`;
+  if (adTimer) clearInterval(adTimer);
+  adTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) {
+      adSkip.textContent = `Skip in ${remaining}`;
+    } else {
+      clearInterval(adTimer); adTimer = null;
+      adSkip.disabled = false; adSkipReady = true;
+      adSkip.textContent = 'Skip ▶';
+    }
+  }, 1000);
+}
+function hideInterstitial() {
+  adShowing = false;
+  adSkipReady = false;
+  adInterstitial.style.display = 'none';
+  if (adTimer) { clearInterval(adTimer); adTimer = null; }
+}
+adSkip.addEventListener('click', () => { if (adSkipReady) hideInterstitial(); });
 
 // A fake snapshot for the /admin preview links — renders a screen with dummy
 // data, no server connection, so it never disturbs a live game.
@@ -148,6 +185,7 @@ function connect(name) {
         // local SFX (only the affected player hears)
         if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId && !firstCurd) playSound('score');
         if (e.type === 'presentClaim' && e.id === selfId) playSound(e.fx); // per-effect sound
+        if (e.type === 'presentClaim' && e.id === selfId && e.fx === 'interstitial') showInterstitial();
         if (e.type === 'explosion') {
           // a ring of splatters for the super-saiyan blast
           for (let i = 0; i < 8; i++) {
@@ -211,6 +249,7 @@ function stopMoving() {
 function steer() {
   const p = me();
   if (!p || !dragPos) return;
+  if (adShowing) return;   // forced to watch the ad
   if (p.stunned) return;   // frozen — can't move
   const target = screenToWorld(dragPos.x, dragPos.y);
   let vx = target.x - p.x, vy = target.y - p.y;

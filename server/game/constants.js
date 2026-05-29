@@ -145,6 +145,7 @@ export const EFFECT = {
   doubleSpeedMult: 2.0,
   halfSpeedMult: 0.5,
   bananaAccel: 0.7,         // 'slidey': how fast velocity eases toward input (lower = more slippery; also the coast-to-stop rate). low = chaotic ice
+  interstitialMs: 3000,     // forced ad-break debuff: you're stunned this long while the skip timer counts down
 };
 
 // Effect ids. Server-authoritative unless noted CLIENT (input/render only).
@@ -163,6 +164,7 @@ export const FX = {
   BANANA: 'banana',              // slidey ice-physics movement (server-side momentum)
   SWAP: 'swap',                  // one-shot wildcard
   PINATA: 'pinata',              // one-shot wildcard
+  INTERSTITIAL: 'interstitial',  // debuff: forced full-screen ad; you're stunned ~3s
 };
 
 // Pools with weights. Mallen draws ONLY from buffs (it's his birthday).
@@ -181,6 +183,7 @@ export const DEBUFF_POOL = [
   { fx: FX.TINY,       w: 2 },
   { fx: FX.BLINDNESS,  w: 2 },
   { fx: FX.BANANA,     w: 2 },
+  { fx: FX.INTERSTITIAL, w: 2 },
 ];
 export const WILDCARD_POOL = [
   { fx: FX.SWAP,    w: 1 },
@@ -192,6 +195,6 @@ export const WILDCARD_POOL = [
 export const MALLEN_BUFF_POOL = BUFF_POOL.filter((e) => e.fx !== FX.CURD_CANNON);
 
 // One-shot effects (applied instantly, no active duration).
-export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA]);
+export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL]);
 // Client-only effects (server still tracks them so the client can read its own).
 export const CLIENT_FX = new Set([FX.BACKWARDS, FX.BLINDNESS]);

@@ -442,6 +442,12 @@ export class Game {
         const t = this._spawnTub(p.x + Math.cos(a) * 40, p.y + Math.sin(a) * 40, 'loose');
       }
       this.events.push({ type: 'pinata', x: p.x, y: p.y });
+    } else if (fx === FX.INTERSTITIAL) {
+      // forced ad break: freeze the claimer (the client shows a skippable
+      // full-screen ad) — they keep their tub but can't act, so they're a sitting duck.
+      p.stunnedUntilMs = now + EFFECT.interstitialMs;
+      p.vx = 0; p.vy = 0;
+      p.charging = false;
     }
   }
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, _resetIds } from '../server/game/game.js';
 import {
-  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX,
+  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL,
 } from '../server/game/constants.js';
 import { seededRng } from './helpers.js';
 
@@ -437,6 +437,20 @@ test('presents roll varied effects within a round', () => {
 
 // Regression: double_speed must speed you up and half_speed slow you down — i.e.
 // the two effects (and the sounds keyed off their ids) are not swapped.
+test('interstitial ad is a one-shot debuff that stuns the claimer for ~3s', () => {
+  assert.ok(ONE_SHOT.has(FX.INTERSTITIAL), 'interstitial is a one-shot');
+  assert.ok(DEBUFF_POOL.some(e => e.fx === FX.INTERSTITIAL), 'interstitial is a debuff');
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound();
+  advance(g, 3200);
+  const p = g.players.get(id);
+  const now = g._clock;
+  g._applyOneShot(p, FX.INTERSTITIAL, now);
+  assert.equal(p.stunnedUntilMs, now + EFFECT.interstitialMs);
+  assert.equal(p.charging, false);
+});
+
 test('double_speed is faster than half_speed (effects not swapped)', () => {
   const g = newGame();
   const id = g.addPlayer('runner');
