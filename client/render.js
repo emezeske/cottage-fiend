@@ -26,21 +26,47 @@ export function addSplat(x, y) {
   splats.push({ x, y, t: 0, delay: 0, life: 700, size: 48, frame: (Math.random() * 3) | 0 });
 }
 
-// The Mallen devouring curds: a staggered burst of splats around him, popping in
-// over ~0.7s so it reads as him ravaging the cottage cheese.
+// The Mallen devouring curds: LOTS of splats raining around him, scattered in
+// both space (wide radius) and time (staggered over ~1s) so it reads as him
+// ravaging the cottage cheese.
 export function addChomp(x, y) {
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 26; i++) {
     const ang = Math.random() * Math.PI * 2;
-    const rad = 16 + Math.random() * 72;
+    const rad = 12 + Math.random() * 120;
     splats.push({
       x: x + Math.cos(ang) * rad,
       y: y + Math.sin(ang) * rad,
       t: 0,
-      delay: Math.random() * 420,           // staggered = animated
-      life: 380 + Math.random() * 300,
-      size: 30 + Math.random() * 42,
+      delay: Math.random() * 720,           // scattered in time
+      life: 360 + Math.random() * 340,
+      size: 26 + Math.random() * 46,
       frame: (Math.random() * 3) | 0,
     });
+  }
+}
+
+// The explosion power-up: curds radiate OUTWARD in timed rings — a tight ring pops
+// first, then a wider one, then a wider one still — for a longer, expanding burst.
+export function addCurdBurst(x, y) {
+  const rings = [
+    { r: 45,  count: 9,  delay: 0 },
+    { r: 110, count: 13, delay: 160 },
+    { r: 185, count: 17, delay: 340 },
+  ];
+  for (const ring of rings) {
+    for (let i = 0; i < ring.count; i++) {
+      const a = (i / ring.count) * Math.PI * 2 + Math.random() * 0.5;
+      const rad = ring.r + (Math.random() - 0.5) * 30;
+      splats.push({
+        x: x + Math.cos(a) * rad,
+        y: y + Math.sin(a) * rad,
+        t: 0,
+        delay: ring.delay + Math.random() * 90,
+        life: 420 + Math.random() * 280,
+        size: 30 + Math.random() * 38,
+        frame: (Math.random() * 3) | 0,
+      });
+    }
   }
 }
 

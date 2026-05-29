@@ -2,7 +2,7 @@
 
 import { loadAssets } from './assets.js';
 import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
-import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, AD_H } from './render.js';
+import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addCurdBurst, AD_H } from './render.js';
 import { setupInput } from './input.js';
 import { screenToWorld } from './camera.js';
 
@@ -188,13 +188,7 @@ function connect(name) {
         if (e.type === 'presentClaim' && e.fx === 'golden_curd') { playSound('golden_curd'); addGoldenCurd(e.id); }
         else if (e.type === 'presentClaim' && e.id === selfId) playSound(e.fx); // local per-effect sound
         if (e.type === 'presentClaim' && e.id === selfId && e.fx === 'interstitial') showInterstitial();
-        if (e.type === 'explosion') {
-          // a ring of splatters for the super-saiyan blast
-          for (let i = 0; i < 8; i++) {
-            const a = (i / 8) * Math.PI * 2;
-            addSplat(e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60);
-          }
-        }
+        if (e.type === 'explosion') addCurdBurst(e.x, e.y); // curds radiate outward in timed rings
       }
       updateButtons();
     }
