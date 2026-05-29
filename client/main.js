@@ -204,19 +204,49 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('scroll', fitCanvas);
 }
 
-// iPad Safari / Chrome ignores `user-scalable=no` and `touch-action: none` for
-// pinch-zoom (accessibility). Two thumbs (one on the joystick, one on the throw
-// button) can register as a pinch and zoom the page — leaving things stuck in a
-// half-zoomed state. iOS-specific gesture events only fire for pinch/rotate
-// (never for independent taps), so cancelling them at the document level blocks
-// the zoom without touching the joystick / button gestures.
-for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
-  document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+// FULL zoom-lockdown. The video-game viewport is the viewport, period. iOS
+// Safari/Chrome ignore `user-scalable=no` and `touch-action: none` for
+// pinch-zoom (Apple's accessibility decision), so we have to cancel every
+// browser-level zoom path from JS instead. We layer several blocks because
+// different browsers/devices route the gesture through different events.
+const _no = (e) => e.preventDefault();
+// 1) iOS-only pinch/rotate gesture events — only fire for actual multi-finger
+//    gestures, not for two independent button taps, so safe to blanket-cancel.
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(ev, _no, { passive: false });
+  window.addEventListener(ev, _no, { passive: false });
 }
-// belt-and-braces: a multi-touch touchmove with a non-1 scale is also a pinch
-document.addEventListener('touchmove', (e) => {
+// 2) Multi-touch on the canvas (or anywhere off the UI buttons) is a page
+//    pinch/pan. Allow only when EACH finger is on the joystick or action
+//    button — that's how the dual-stick uses two thumbs simultaneously.
+function _onUI(t) {
+  const el = document.elementFromPoint(t.clientX, t.clientY);
+  return el && (joystick.contains(el) || actionBtn.contains(el));
+}
+function _blockMultiTouch(e) {
+  if (e.touches && e.touches.length > 1) {
+    let offUI = 0;
+    for (const t of e.touches) if (!_onUI(t)) offUI++;
+    if (offUI >= 1) e.preventDefault();         // any non-UI finger in a multi-touch = page gesture
+  }
   if (e.scale !== undefined && e.scale !== 1) e.preventDefault();
+}
+document.addEventListener('touchstart', _blockMultiTouch, { passive: false });
+document.addEventListener('touchmove',  _blockMultiTouch, { passive: false });
+// 3) Double-tap-to-zoom on iOS — cancel the second tap if it lands within ~350ms.
+let _lastTapTs = 0;
+document.addEventListener('touchend', (e) => {
+  const now = performance.now();
+  if (now - _lastTapTs < 350) e.preventDefault();
+  _lastTapTs = now;
 }, { passive: false });
+// 4) Desktop Ctrl+wheel and Ctrl+0/+/- (in case the game is ever run on a laptop).
+window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=' || e.key === '0')) {
+    e.preventDefault();
+  }
+});
 
 function wsUrl() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
