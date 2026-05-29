@@ -58,7 +58,7 @@ debuffs, and never curd cannon since he can't throw).
 | `sfx_golden_curd.mp3` | instant +1 point with the big celebration |
 | `sfx_corgi_attack.mp3` | spawns a hunter corgi |
 | `sfx_disc_golf.mp3` | periodically flings frisbees that bonk others |
-| `sfx_dance_party.mp3` | the power-up cue when you grab Dance Party (the looping party music is separate) |
+| _(no claim cue for **Dance Party** — the looping `sfx_dance_party_theme.mp3` covers the moment on its own)_ | |
 
 **Curses (bad):**
 
