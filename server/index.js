@@ -3,6 +3,7 @@
 
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
+import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,7 +29,11 @@ const httpServer = http.createServer((req, res) => {
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('not found'); return; }
     const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      // never cache the client during active iteration — always serve fresh files
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    });
     res.end(data);
   });
 });
@@ -75,6 +80,9 @@ wss.on('connection', (ws) => {
       case MSG.RELEASE:
         if (playerId) game.release(playerId, now);
         break;
+      case MSG.PUNCH:
+        if (playerId) game.punch(playerId, now);
+        break;
       case MSG.READY:
         if (playerId) game.setReady(playerId);
         break;
@@ -107,6 +115,21 @@ setInterval(() => {
   broadcast({ type: MSG.STATE, snapshot: game.snapshot(), events });
 }, TICK_MS);
 
+// Non-internal IPv4 addresses, so you can open the game from a phone on the LAN.
+function lanAddresses() {
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .filter((i) => i && i.family === 'IPv4' && !i.internal)
+    .map((i) => i.address);
+}
+
 httpServer.listen(PORT, () => {
   console.log(`🧀 Cottage Fiend server listening on :${PORT}`);
+  console.log(`   Local:   http://localhost:${PORT}`);
+  const lan = lanAddresses();
+  if (lan.length) {
+    for (const ip of lan) console.log(`   Network: http://${ip}:${PORT}  (open this on your phone)`);
+  } else {
+    console.log('   Network: no LAN IPv4 found (are you on Wi-Fi/Ethernet?)');
+  }
 });

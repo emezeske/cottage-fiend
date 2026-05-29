@@ -5,8 +5,8 @@ export const TICK_RATE = 30;                 // server simulation ticks per seco
 export const TICK_MS = 1000 / TICK_RATE;
 
 export const ARENA = {
-  width: 1280,
-  height: 720,
+  width: 1600,
+  height: 1600,
 };
 
 // --- Players ---------------------------------------------------------------
@@ -39,6 +39,29 @@ export const TUB = {
   radius: 14,
   friction: 0.90,            // per-tick velocity damping when sliding
   minSlideSpeed: 20,         // below this, a sliding tub comes to rest (loose)
+  bump: 16,                  // px a non-catching player is shoved by a tub that hits them
+};
+
+// Punching (delivery players steal tubs; the Mallen attacks). One punch knocks a
+// carried tub loose, launched in the puncher's facing direction, for a scramble.
+export const PUNCH = {
+  reach: 46,                 // added to the puncher's radius for delivery players
+  cooldownMs: 450,           // min time between delivery punches (Mallen uses MALLEN.attackCooldownMs)
+  launchSpeed: 520,          // px/sec the knocked-loose tub flies
+  knockback: 26,             // px the punched player is shoved
+};
+
+// Player-vs-player contact: the mover shoves whoever they run into.
+export const COLLISION = {
+  shove: 6,                  // px per tick of contact, scaled by the mover's input
+};
+
+// The truck "pickup zone": a rectangle around the truck that the Mallen cannot
+// enter, so it can't camp the truck. Delivery players grab tubs here safely.
+export const SAFE_ZONE = {
+  halfW: 150,                // half width of the zone
+  halfH: 115,                // half height of the zone
+  offsetY: 30,               // shift down so the zone covers the ready tubs below the truck
 };
 
 export const THROW = {
@@ -53,7 +76,7 @@ export const LOCI = {
   truckRadius: 60,
   fridgeRadius: 54,
   scoreRadius: 80,           // a tub landing within this of fridge center scores
-  minSeparation: 520,        // truck and fridge spawn at least this far apart
+  minSeparation: 700,        // truck and fridge spawn at least this far apart
   edgePadding: 120,          // keep loci away from arena edges
   truckRefillMs: 1000,       // a new ready tub appears 1s after one is taken
   truckTubGap: 26,           // spacing of the ready tubs shown on the truck
@@ -82,6 +105,7 @@ export const MSG = {
   PICKUP: 'pickup',         // tap to grab nearest tub
   CHARGE: 'charge',         // begin charging a throw
   RELEASE: 'release',       // release throw at current oscillator value
+  PUNCH: 'punch',           // punch button: knock a tub loose / Mallen attack
   READY: 'ready',           // LET'S GO button
   // server -> client
   WELCOME: 'welcome',       // assigns id, sends constants

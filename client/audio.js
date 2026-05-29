@@ -66,14 +66,36 @@ function noiseBurst({ dur = 0.2, gain = 0.3, lp = 2000 }) {
   src.start();
 }
 
+// Crowd applause: a swell of band-passed noise peppered with random "claps".
+function applause({ dur = 1.1, gain = 0.3 }) {
+  const n = Math.floor(ctx.sampleRate * dur);
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    const swell = Math.sin(Math.min(1, t * 4) * Math.PI / 2) * (1 - t * 0.55);
+    const clap = Math.random() < 0.45 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.25;
+    data[i] = clap * swell;
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const filt = ctx.createBiquadFilter(); filt.type = 'bandpass';
+  filt.frequency.value = 1900; filt.Q.value = 0.6;
+  const g = ctx.createGain(); g.gain.value = gain;
+  src.connect(filt).connect(g).connect(ctx.destination);
+  src.start();
+}
+
 // Map each game event to a synthesized sound.
 const PROCEDURAL = {
   pickup: () => tone({ type: 'square', freq: 520, dur: 0.08, gain: 0.15, slideTo: 740 }),
   throw:  () => { noiseBurst({ dur: 0.25, gain: 0.25, lp: 1200 });
                   tone({ type: 'sawtooth', freq: 300, dur: 0.2, gain: 0.1, slideTo: 120 }); },
   splat:  () => noiseBurst({ dur: 0.18, gain: 0.4, lp: 900 }),
-  score:  () => { tone({ freq: 660, dur: 0.12, gain: 0.2 });
-                  setTimeout(() => tone({ freq: 990, dur: 0.18, gain: 0.22 }), 90); },
+  score:  () => { // delivery! a little cheer + crowd applause
+    applause({ dur: 1.2, gain: 0.32 });
+    [660, 880, 1320].forEach((f, i) =>
+      setTimeout(() => tone({ type: 'square', freq: f, dur: 0.16, gain: 0.18 }), i * 90));
+  },
   attack: () => tone({ type: 'square', freq: 180, dur: 0.06, gain: 0.18, slideTo: 90 }),
   drop:   () => tone({ type: 'triangle', freq: 220, dur: 0.2, gain: 0.18, slideTo: 80 }),
   chomp:  () => { // comically messy animal devour

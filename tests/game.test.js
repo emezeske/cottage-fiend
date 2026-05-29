@@ -165,25 +165,63 @@ test('many players can each carry a tub at once', () => {
   assert.equal(carrying.length, 4);
 });
 
-test('mallen auto-attacks and forces a drop after hitsToDrop', () => {
+test('mallen punch knocks the carried tub loose in one hit', () => {
   const g = newGame();
   const victim = g.addPlayer('victim');
   const mid = g.addPlayer('mallen');
   g.phase = PHASE.PLAYING;
   const v = g.players.get(victim), m = g.players.get(mid);
-  // give victim a tub
   giveTub(g, victim);
-  // place mallen on top of victim
-  v.x = 400; v.y = 400; m.x = 400; m.y = 400;
-  v.moveInput = { x: 0, y: 0 };
-  // run long enough for hitsToDrop attacks (cooldown ~600ms each)
-  advance(g, MALLEN.attackCooldownMs * (MALLEN.hitsToDrop + 1) + 200);
-  assert.equal(g.players.get(victim).carryingTubId, null, 'victim should have dropped');
-  // the dropped tub is now loose (and may be devoured by the adjacent mallen the
-  // very next tick, which is correct behavior), so confirm via eaten OR loose tub
-  const mallenAte = g.players.get(mid).eaten >= 1;
-  const looseExists = g.tubs.some(t => t.state === 'loose');
-  assert.ok(mallenAte || looseExists, 'dropped tub should be loose or already devoured');
+  v.x = 400; v.y = 400; m.x = 420; m.y = 400; m.dir = { x: 1, y: 0 };
+  g.punch(mid, 0);
+  assert.equal(g.players.get(victim).carryingTubId, null, 'victim lost the tub in one punch');
+  // the tub is now in play (flying away, or already loose/devoured by the mallen)
+  const inPlay = g.tubs.some(t => t.state === 'flying' || t.state === 'loose');
+  const ate = g.players.get(mid).eaten >= 1;
+  assert.ok(inPlay || ate, 'knocked-loose tub should be flying/loose/devoured');
+});
+
+test('punching a carrier launches their tub in the punch direction', () => {
+  const g = newGame();
+  const a = g.addPlayer('puncher');
+  const b = g.addPlayer('carrier');
+  g.phase = PHASE.PLAYING;
+  const pa = g.players.get(a), pb = g.players.get(b);
+  giveTub(g, b);
+  pa.x = 400; pa.y = 400; pb.x = 420; pb.y = 400; pa.dir = { x: 1, y: 0 };
+  g.punch(a, 0);
+  assert.equal(g.players.get(b).carryingTubId, null);
+  const t = g.tubs.find(t => t.state === 'flying');
+  assert.ok(t && t.vx > 0, 'tub launched along +x (the punch direction)');
+});
+
+test('punch respects its cooldown', () => {
+  const g = newGame();
+  const a = g.addPlayer('a');
+  const b = g.addPlayer('b');
+  g.phase = PHASE.PLAYING;
+  const pa = g.players.get(a), pb = g.players.get(b);
+  giveTub(g, b);
+  pa.x = 400; pa.y = 400; pb.x = 420; pb.y = 400; pa.dir = { x: 1, y: 0 };
+  g.punch(a, 0);                       // knocks the tub out
+  giveTub(g, b);                       // give them another
+  g.punch(a, 100);                     // within cooldown: ignored
+  assert.equal(g.players.get(b).carryingTubId != null, true, 'second punch was on cooldown');
+});
+
+test('an empty-handed player catches a thrown tub that hits them', () => {
+  const g = newGame();
+  const thrower = g.addPlayer('thrower');
+  const catcher = g.addPlayer('catcher');
+  g.phase = PHASE.PLAYING;
+  const pt = g.players.get(thrower), pc = g.players.get(catcher);
+  pt.x = 200; pt.y = 200; pc.x = 320; pc.y = 200;
+  giveTub(g, thrower);
+  pt.dir = { x: 1, y: 0 };
+  g.startCharge(thrower, 0);
+  g.release(thrower, (1000 / THROW.oscillationHz) * 0.5); // strong throw toward catcher
+  advance(g, 800);
+  assert.equal(g.players.get(catcher).carryingTubId != null, true, 'catcher caught the thrown tub');
 });
 
 test('mallen devours a loose tub, gains frenzy and eaten count', () => {
@@ -282,6 +320,36 @@ test('players collide and are pushed apart', () => {
   g.tick(33);
   const d = Math.hypot(pb.x - pa.x, pb.y - pa.y);
   assert.ok(d >= pa.radius + pb.radius - 1, `players should not overlap, dist=${d}`);
+});
+
+test('the Mallen is kept out of the truck pickup zone', () => {
+  const g = newGame();
+  const mid = g.addPlayer('mallen');
+  g.phase = PHASE.PLAYING;
+  const m = g.players.get(mid);
+  g.loci.truck = { x: 800, y: 800 };
+  g._computeSafeZone();
+  const z = g.safeZone;
+  m.x = z.x + z.w / 2; m.y = z.y + z.h / 2; // drop the Mallen in the middle of the zone
+  g.tick(33);
+  const inside = m.x > z.x - m.radius && m.x < z.x + z.w + m.radius &&
+                 m.y > z.y - m.radius && m.y < z.y + z.h + m.radius;
+  assert.equal(inside, false, 'mallen should be pushed out of the pickup zone');
+});
+
+test('a delivery player CAN stand in the pickup zone', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.phase = PHASE.PLAYING;
+  const p = g.players.get(id);
+  g.loci.truck = { x: 800, y: 800 };
+  g._computeSafeZone();
+  const z = g.safeZone;
+  // stand below the truck where the ready tubs are (inside the zone, clear of the truck circle)
+  p.x = z.x + z.w / 2; p.y = z.y + z.h - 20;
+  g.tick(33);
+  const inside = p.x > z.x && p.x < z.x + z.w && p.y > z.y && p.y < z.y + z.h;
+  assert.equal(inside, true, 'delivery players are allowed in the pickup zone');
 });
 
 test('player cannot stand inside the truck obstacle', () => {

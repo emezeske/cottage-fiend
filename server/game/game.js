@@ -6,7 +6,7 @@
 
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
-  PRESENT, EFFECT, FX, ONE_SHOT,
+  PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE,
 } from './constants.js';
 import { dist, normalize, resolveCircleOverlap, clampToArena, chargePower } from './vec.js';
 import { placeLoci, randSpawn } from './spawn.js';
@@ -22,6 +22,7 @@ export class Game {
     this.players = new Map();   // id -> player
     this.tubs = [];             // active tubs (carried, flying, or loose)
     this.loci = placeLoci(ARENA, LOCI, rng);
+    this._computeSafeZone();
     this.countdownMs = 0;
     this.events = [];           // one-shot events drained each broadcast
     this.mallenId = null;       // id of the player currently acting as Mallen
@@ -52,14 +53,15 @@ export class Game {
       // mallen-only:
       eaten: 0,
       frenzyMs: 0,
-      lastAttackMs: 0,
+      lastAttackMs: -1e9,         // "never attacked" (clock 0 is a valid attack time)
       eatingUntilMs: 0,
-      spriteIndex: (id % 6),      // which delivery sprite variant
+      spriteIndex: (id % 12),     // which delivery sprite variant (12 player colors)
       // power-up/debuff state:
       effect: null,               // active FX id or null
       effectUntilMs: 0,           // clock time the effect ends
       cannonArmed: false,         // curd cannon: next throw auto-scores
       greaseGrabMs: -1,           // clock time greased player grabbed (-1 = none)
+      noPickupUntilMs: 0,         // auto-pickup suppressed until this clock time (after a forced drop)
     };
     this.players.set(id, p);
     if (isMallen && this.mallenId == null) this.mallenId = id;
@@ -97,25 +99,44 @@ export class Game {
   pickup(id, nowMs) {
     const p = this.players.get(id);
     if (!p || p.isMallen || p.carryingTubId != null) return;
-    // tap grabs the nearest tappable tub within reach: a 'ready' tub on the
-    // truck, or a 'loose' tub on the ground. First come, first serve.
+    // grab the nearest tappable tub within reach: a 'ready' tub on the truck, or
+    // a 'loose' tub on the ground. First come, first serve.
     const reach = p.radius + TUB.radius + 28;
+    const best = this._nearestGrabbableTub(p, reach);
+    if (best) this._grabTub(p, best, nowMs);
+  }
+
+  _nearestGrabbableTub(p, reach) {
     let best = null, bestD = Infinity;
     for (const t of this.tubs) {
       if (t.state !== 'loose' && t.state !== 'ready') continue;
       const d = dist(p.x, p.y, t.x, t.y);
       if (d < reach && d < bestD) { best = t; bestD = d; }
     }
-    if (best) {
-      const wasReady = best.state === 'ready';
-      best.state = 'carried';
-      best.carrierId = id;
-      best.lastCarrierId = id;
-      p.carryingTubId = best.id;
-      if (p.effect === FX.GREASED) p.greaseGrabMs = this._clock || 0;
-      this.events.push({ type: 'pickup', x: p.x, y: p.y });
-      // taking a ready tub off the truck schedules a 1s refill
-      if (wasReady) this._scheduleTruckRefill(nowMs);
+    return best;
+  }
+
+  _grabTub(p, t, now) {
+    const wasReady = t.state === 'ready';
+    t.state = 'carried';
+    t.carrierId = p.id;
+    t.lastCarrierId = p.id;
+    p.carryingTubId = t.id;
+    if (p.effect === FX.GREASED) p.greaseGrabMs = now;
+    this.events.push({ type: 'pickup', x: p.x, y: p.y });
+    // taking a ready tub off the truck schedules a 1s refill
+    if (wasReady) this._scheduleTruckRefill(now);
+  }
+
+  // Auto-pickup: a delivery player who runs over a tub grabs it (no tap needed).
+  // Suppressed briefly after a forced drop so the Mallen can eat it / greased works.
+  _autoPickup(now) {
+    const reach = PLAYER.radius + TUB.radius + 6; // must actually run onto it
+    for (const p of this.players.values()) {
+      if (p.isMallen || p.carryingTubId != null) continue;
+      if (now < p.noPickupUntilMs) continue;
+      const best = this._nearestGrabbableTub(p, reach);
+      if (best) this._grabTub(p, best, now);
     }
   }
 
@@ -139,6 +160,8 @@ export class Game {
     t.carrierId = null;
     t.vx = p.dir.x * power;
     t.vy = p.dir.y * power;
+    t.thrownBy = id;                 // the thrower can't instantly re-catch their own throw
+    t.thrownGraceUntil = nowMs + 400;
     // curd cannon: this throw gets an enlarged fridge score radius, then disarms
     t.cannon = !!p.cannonArmed;
     if (p.cannonArmed) { p.cannonArmed = false; if (p.effect === FX.CURD_CANNON) this._clearEffect(p); }
@@ -149,6 +172,56 @@ export class Game {
     const p = this.players.get(id);
     if (!p) return;
     p.ready = true;
+  }
+
+  // Punch: shove the nearest other player and, if they're carrying, knock their
+  // tub loose — launched in the puncher's facing direction so both can scramble.
+  // The Mallen uses the same action as its attack.
+  punch(id, now) {
+    const p = this.players.get(id);
+    if (!p) return;
+    if (p.isMallen && now < p.eatingUntilMs) return; // mid-chomp
+    const cd = p.isMallen
+      ? (p.frenzyMs > 0 ? MALLEN.attackCooldownMs * FRENZY.attackCdMult : MALLEN.attackCooldownMs)
+      : PUNCH.cooldownMs;
+    if (now - p.lastAttackMs < cd) return;
+    p.lastAttackMs = now;
+    this.events.push({ type: 'attack', x: p.x, y: p.y });
+
+    const range = p.isMallen ? MALLEN.attackRange : p.radius + PUNCH.reach;
+    let target = null, td = Infinity;
+    for (const o of this.players.values()) {
+      if (o.id === p.id) continue;
+      if (o.effect === FX.INVINCIBLE) continue;
+      const d = dist(p.x, p.y, o.x, o.y);
+      if (d < range + o.radius && d < td) { target = o; td = d; }
+    }
+    if (!target) return;
+
+    // comic BAM at the point of impact
+    this.events.push({ type: 'bam', x: target.x, y: target.y });
+
+    // shove the target in the punch (facing) direction
+    target.x += p.dir.x * PUNCH.knockback;
+    target.y += p.dir.y * PUNCH.knockback;
+
+    // knock their tub loose, launched the way you punched
+    if (target.carryingTubId != null) {
+      const t = this.tubs.find((t) => t.id === target.carryingTubId);
+      if (t) {
+        t.state = 'flying';
+        t.carrierId = null;
+        t.lastCarrierId = null;            // a punched-loose tub credits nobody if it lands
+        t.vx = p.dir.x * PUNCH.launchSpeed;
+        t.vy = p.dir.y * PUNCH.launchSpeed;
+        t.thrownBy = target.id;            // the victim can't instantly re-catch it
+        t.thrownGraceUntil = now + 400;
+      }
+      target.carryingTubId = null;
+      target.hitsTaken = 0;
+      this.events.push({ type: 'drop', x: target.x, y: target.y });
+      this.events.push({ type: 'splat', x: target.x, y: target.y });
+    }
   }
 
   // ---- tub helpers --------------------------------------------------------
@@ -170,15 +243,17 @@ export class Game {
     return n;
   }
 
-  // Position ready tubs in a little cluster on top of the truck.
+  // Position ready tubs in a visible row in front of (below) the truck, so they
+  // never hide under the truck sprite — even when there's only one.
   _positionReadyTubs() {
     const ready = this.tubs.filter(t => t.state === 'ready');
     const { truck } = this.loci;
+    const n = ready.length;
+    const baseY = truck.y + LOCI.truckRadius + 20;
+    const rowWidth = (n - 1) * LOCI.truckTubGap;
     ready.forEach((t, i) => {
-      const angle = (i / Math.max(1, ready.length)) * Math.PI * 2;
-      const r = ready.length <= 1 ? 0 : LOCI.truckTubGap;
-      t.x = truck.x + Math.cos(angle) * r;
-      t.y = truck.y + Math.sin(angle) * r;
+      t.x = truck.x - rowWidth / 2 + i * LOCI.truckTubGap;
+      t.y = baseY;
     });
   }
 
@@ -300,6 +375,7 @@ export class Game {
             const t = this.tubs.find(t => t.id === o.carryingTubId);
             if (t) { t.state = 'loose'; t.carrierId = null; }
             o.carryingTubId = null; o.hitsTaken = 0;
+            o.noPickupUntilMs = now + 1200;
           }
         }
       }
@@ -330,6 +406,7 @@ export class Game {
         if (t) { t.state = 'loose'; t.carrierId = null; }
         p.carryingTubId = null;
         p.greaseGrabMs = -1;
+        p.noPickupUntilMs = now + 1200;
         this.events.push({ type: 'drop', x: p.x, y: p.y });
       }
       if (now >= p.effectUntilMs) this._clearEffect(p);
@@ -392,9 +469,11 @@ export class Game {
 
     if (this.phase === PHASE.PLAYING) {
       this._processTruckRefills(now);
+      this._autoPickup(now);
       this._updatePresents(dt, now);
       this._applyMagnets(dt);
       this._mallenLogic(now);
+      this._checkCarriedDeliveries();
       this._checkRoundEnd();
     }
   }
@@ -424,16 +503,52 @@ export class Game {
       for (let j = i + 1; j < arr.length; j++) {
         const a = arr[i], b = arr[j];
         const fix = resolveCircleOverlap(a, a.radius, b, b.radius);
-        if (fix) { a.x = fix.a.x; a.y = fix.a.y; b.x = fix.b.x; b.y = fix.b.y; }
+        if (!fix) continue;
+        a.x = fix.a.x; a.y = fix.a.y; b.x = fix.b.x; b.y = fix.b.y;
+        // running into someone shoves them: each mover nudges the other along
+        // the contact normal, scaled by how hard they're moving into them.
+        const nx = b.x - a.x, ny = b.y - a.y;
+        const len = Math.hypot(nx, ny) || 1;
+        const ux = nx / len, uy = ny / len;
+        const aMove = Math.hypot(a.moveInput.x, a.moveInput.y);
+        const bMove = Math.hypot(b.moveInput.x, b.moveInput.y);
+        b.x += ux * COLLISION.shove * aMove; b.y += uy * COLLISION.shove * aMove;
+        a.x -= ux * COLLISION.shove * bMove; a.y -= uy * COLLISION.shove * bMove;
       }
     }
     // player vs loci (solid obstacles)
     for (const p of arr) {
       this._pushOutOf(p, this.loci.truck, LOCI.truckRadius);
       this._pushOutOf(p, this.loci.fridge, LOCI.fridgeRadius);
+      if (p.isMallen) this._pushMallenOutOfZone(p); // no camping the truck
       const c = clampToArena(p.x, p.y, p.radius, ARENA);
       p.x = c.x; p.y = c.y;
     }
+  }
+
+  // The no-Mallen pickup rectangle around the truck (top-left x/y + w/h).
+  _computeSafeZone() {
+    const t = this.loci.truck;
+    this.safeZone = {
+      x: t.x - SAFE_ZONE.halfW,
+      y: t.y + SAFE_ZONE.offsetY - SAFE_ZONE.halfH,
+      w: SAFE_ZONE.halfW * 2,
+      h: SAFE_ZONE.halfH * 2,
+    };
+  }
+
+  // Push the Mallen to the nearest edge if it's inside the pickup zone.
+  _pushMallenOutOfZone(m) {
+    const z = this.safeZone;
+    const left = z.x - m.radius, right = z.x + z.w + m.radius;
+    const top = z.y - m.radius, bottom = z.y + z.h + m.radius;
+    if (m.x <= left || m.x >= right || m.y <= top || m.y >= bottom) return;
+    const dl = m.x - left, dr = right - m.x, dt = m.y - top, db = bottom - m.y;
+    const min = Math.min(dl, dr, dt, db);
+    if (min === dl) m.x = left;
+    else if (min === dr) m.x = right;
+    else if (min === dt) m.y = top;
+    else m.y = bottom;
   }
 
   _pushOutOf(p, center, r) {
@@ -464,13 +579,31 @@ export class Game {
         t.vx *= TUB.friction;
         t.vy *= TUB.friction;
 
-        // tub hits a player => splat, knockback that player a touch
+        // tub hits a player: an empty-handed delivery player CATCHES it; anyone
+        // else (carrying, or the Mallen) gets bumped in the tub's travel direction.
+        let caught = false;
         for (const p of this.players.values()) {
-          if (dist(t.x, t.y, p.x, p.y) < p.radius + TUB.radius) {
-            this.events.push({ type: 'splat', x: t.x, y: t.y });
-            t.vx *= -0.3; t.vy *= -0.3;
+          if (dist(t.x, t.y, p.x, p.y) >= p.radius + TUB.radius) continue;
+          if (t.thrownBy === p.id && now < (t.thrownGraceUntil || 0)) continue; // ignore thrower briefly
+          const canCatch = !p.isMallen && p.carryingTubId == null && now >= p.noPickupUntilMs;
+          if (canCatch) {
+            t.state = 'carried';
+            t.carrierId = p.id;
+            t.lastCarrierId = p.id;
+            p.carryingTubId = t.id;
+            if (p.effect === FX.GREASED) p.greaseGrabMs = now;
+            this.events.push({ type: 'pickup', x: p.x, y: p.y });
+            caught = true;
+            break;
           }
+          const sp = Math.hypot(t.vx, t.vy) || 1;
+          p.x += (t.vx / sp) * TUB.bump;
+          p.y += (t.vy / sp) * TUB.bump;
+          this.events.push({ type: 'splat', x: t.x, y: t.y });
+          t.vx *= -0.3; t.vy *= -0.3;
         }
+        if (caught) continue;
+
         // tub reaches the fridge? curd cannon enlarges the effective radius.
         const dFridge = dist(t.x, t.y, this.loci.fridge.x, this.loci.fridge.y);
         const scoreR = t.cannon ? LOCI.scoreRadius * EFFECT.cannonScoreMult : LOCI.scoreRadius;
@@ -493,6 +626,21 @@ export class Game {
     this.tubs = this.tubs.filter(t => !t._dead);
   }
 
+  // Walking a carried tub up to the fridge delivers it (throwing is optional).
+  _checkCarriedDeliveries() {
+    const f = this.loci.fridge;
+    let scored = false;
+    for (const p of this.players.values()) {
+      if (p.isMallen || p.carryingTubId == null) continue;
+      if (dist(p.x, p.y, f.x, f.y) < LOCI.fridgeRadius + p.radius + 8) {
+        const t = this.tubs.find((t) => t.id === p.carryingTubId);
+        p.carryingTubId = null;
+        if (t) { t._dead = true; this._scoreDelivery(t); scored = true; }
+      }
+    }
+    if (scored) this.tubs = this.tubs.filter((t) => !t._dead);
+  }
+
   _scoreDelivery(tub) {
     // credit the last carrier if we tracked one; else nobody (still counts as gone)
     const scorer = tub.lastCarrierId != null ? this.players.get(tub.lastCarrierId) : null;
@@ -504,36 +652,12 @@ export class Game {
                        name: scorer ? scorer.name : null });
   }
 
+  // The Mallen attacks via the same PUNCH action as everyone (see punch()); this
+  // only handles auto-devouring loose tubs it walks over.
   _mallenLogic(now) {
     const m = this.players.get(this.mallenId);
     if (!m) return;
     if (now < m.eatingUntilMs) return; // mid-chomp
-
-    const cd = m.frenzyMs > 0 ? MALLEN.attackCooldownMs * FRENZY.attackCdMult
-                              : MALLEN.attackCooldownMs;
-
-    // attack nearest delivery player in range (invincible players are skipped)
-    if (now - m.lastAttackMs >= cd) {
-      let target = null, td = Infinity;
-      for (const p of this.players.values()) {
-        if (p.isMallen) continue;
-        if (p.effect === FX.INVINCIBLE) continue;
-        const d = dist(m.x, m.y, p.x, p.y);
-        if (d < MALLEN.attackRange && d < td) { target = p; td = d; }
-      }
-      if (target) {
-        m.lastAttackMs = now;
-        target.hitsTaken += 1;
-        this.events.push({ type: 'attack', x: target.x, y: target.y });
-        if (target.hitsTaken >= MALLEN.hitsToDrop && target.carryingTubId != null) {
-          const t = this.tubs.find(t => t.id === target.carryingTubId);
-          if (t) { t.state = 'loose'; t.carrierId = null; }
-          target.carryingTubId = null;
-          target.hitsTaken = 0;
-          this.events.push({ type: 'drop', x: target.x, y: target.y });
-        }
-      }
-    }
 
     // devour a loose tub within reach
     for (const t of this.tubs) {
@@ -580,6 +704,7 @@ export class Game {
 
   startRound() {
     this.loci = placeLoci(ARENA, LOCI, this.rng);
+    this._computeSafeZone();
     this.tubs = [];
     this.roundWinner = null;
     for (const p of this.players.values()) {
@@ -587,10 +712,11 @@ export class Game {
       p.x = s.x; p.y = s.y;
       p.score = 0; p.eaten = 0; p.hitsTaken = 0;
       p.carryingTubId = null; p.charging = false;
-      p.frenzyMs = 0; p.eatingUntilMs = 0; p.lastAttackMs = 0;
+      p.frenzyMs = 0; p.eatingUntilMs = 0; p.lastAttackMs = -1e9;
       p.radius = p.isMallen ? MALLEN.radius : PLAYER.radius;
       p.ready = false;
       p.effect = null; p.effectUntilMs = 0; p.cannonArmed = false; p.greaseGrabMs = -1;
+      p.noPickupUntilMs = 0;
     }
     this.phase = PHASE.COUNTDOWN;
     this.countdownMs = ROUND.startCountdownMs;
@@ -612,7 +738,9 @@ export class Game {
     return {
       phase: this.phase,
       countdownMs: Math.max(0, Math.round(this.countdownMs)),
+      arena: { width: ARENA.width, height: ARENA.height },
       loci: this.loci,
+      safeZone: this.safeZone,
       roundWinner: this.roundWinner,
       players: [...this.players.values()].map(p => ({
         id: p.id, name: p.name, x: Math.round(p.x), y: Math.round(p.y),
