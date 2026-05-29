@@ -159,6 +159,70 @@ function drawDashTrail(ctx) {
   }
 }
 
+// Golden-curd buff celebration: a big golden-curd image zooms up above the
+// claimer's head with a ring of smaller copies spinning around it, then a "+1
+// POINT" rises and fades. Driven by the presentClaim event, visible to everyone.
+const GOLDEN_MS = 3000;          // mirrors EFFECT.goldenCurdMs (the server freeze length)
+const goldenCurds = [];          // { id, t0 } active celebrations, keyed by player id
+export function addGoldenCurd(id) {
+  goldenCurds.push({ id, t0: performance.now() });
+}
+function isGolden(id) {
+  const now = performance.now();
+  return goldenCurds.some(g => g.id === id && now - g.t0 < GOLDEN_MS);
+}
+function drawGoldenCurds(ctx, state) {
+  const img = images.golden_curd;
+  const now = performance.now();
+  const players = (state && state.players) || [];
+  for (let i = goldenCurds.length - 1; i >= 0; i--) {
+    const g = goldenCurds[i];
+    const elapsed = now - g.t0;
+    if (elapsed >= GOLDEN_MS) { goldenCurds.splice(i, 1); continue; }
+    const p = players.find(pp => pp.id === g.id);
+    if (!p) continue;                                   // claimer left — skip (pruned on expiry)
+    const t = elapsed / GOLDEN_MS;                      // 0..1
+    const aspect = (img && img.width) ? img.height / img.width : 0.667;
+    const cx = p.x;
+    const cy = p.y - p.radius * 1.5 - 95;               // float well above the head
+    // big image: ease-out zoom from tiny to full over the first 70%
+    const grow = Math.min(1, t / 0.7);
+    const ease = 1 - Math.pow(1 - grow, 3);
+    const w = 120 * (0.12 + 0.88 * ease);               // ~20% of the screen at full size
+    const h = w * aspect;
+    if (img) {
+      // kaleidoscope: smaller copies orbiting + self-rotating around the big one
+      const N = 6, orbitR = w * 0.92, sw = w * 0.42, sh = sw * aspect;
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      for (let k = 0; k < N; k++) {
+        const a = elapsed * 0.004 + (k / N) * Math.PI * 2;
+        ctx.save();
+        ctx.translate(cx + Math.cos(a) * orbitR, cy + Math.sin(a) * orbitR);
+        ctx.rotate(a + elapsed * 0.006);
+        ctx.drawImage(img, -sw / 2, -sh / 2, sw, sh);
+        ctx.restore();
+      }
+      ctx.restore();
+      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);  // big center image
+    }
+    // "+1 POINT" rises and fades over the last segment
+    if (t > 0.6) {
+      const tt = (t - 0.6) / 0.4;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - tt);
+      ctx.font = '900 38px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 6; ctx.strokeStyle = '#1e1814';
+      ctx.fillStyle = '#ffe14d';
+      const ty = cy - h / 2 - 14 - tt * 70;
+      ctx.strokeText('+1 POINT', cx, ty);
+      ctx.fillText('+1 POINT', cx, ty);
+      ctx.restore();
+    }
+  }
+}
+
 function drawConfetti(ctx) {
   for (let i = confetti.length - 1; i >= 0; i--) {
     const c = confetti[i];
@@ -275,6 +339,7 @@ export function render(ctx, canvas, state, selfId, charge) {
   drawConfetti(ctx);
   drawBams(ctx);
   drawPoofs(ctx);
+  drawGoldenCurds(ctx, state);   // golden-curd celebration, on top of the world
 
   if (charge && charge.active) drawChargeArc(ctx, charge);
 
@@ -376,8 +441,11 @@ function dir8(dx, dy) {
 function drawPlayer(ctx, p, frame, isSelf) {
   const dir = dir8(p.dir.x, p.dir.y);
   const tnow = performance.now();
+  // golden-curd celebration freezes the player too, but it's a buff — show the
+  // golden animation (drawGoldenCurds) instead of the debuff stun visuals.
+  const golden = isGolden(p.id);
   // stunned = rapid frame flicker; otherwise walk only while moving
-  const f = p.stunned ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
+  const f = (p.stunned && !golden) ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
   let img;
   if (p.isMallen) img = images[`mallen${p.frenzy ? '_frenzy' : ''}_${dir}_${f}`];
   else img = images[`delivery_${p.spriteIndex}_${dir}_${f}`];
@@ -386,10 +454,10 @@ function drawPlayer(ctx, p, frame, isSelf) {
   const size = p.radius * 3.0;
   let px = p.x;
   const cy = p.y - size * 0.12;
-  if (p.stunned) px += (Math.random() - 0.5) * 4; // jitter/shake
+  if (p.stunned && !golden) px += (Math.random() - 0.5) * 4; // jitter/shake
   if (p.dashing) addDashTrail(p.x, cy, size * 0.42);
 
-  if (p.stunned) {
+  if (p.stunned && !golden) {
     // A Mallen chomp can stun ~everyone at once, so avoid shadowBlur here (it's a
     // brutal per-sprite mobile GPU cost when many are stunned) — use a cheap
     // hue-cycling ring + the existing flicker/jitter instead.
@@ -481,7 +549,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
     ctx.textAlign = 'left';
     ctx.fillText('AD', ax, ay + 6);
     ctx.textAlign = 'center';
-  } else if (p.stunned) {
+  } else if (p.stunned && !golden) {
     ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.fillStyle = '#9fefff';
     ctx.strokeText('💫 STUNNED 💫', p.x, topY - 16);

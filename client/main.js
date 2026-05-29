@@ -2,7 +2,7 @@
 
 import { loadAssets } from './assets.js';
 import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
-import { render, addSplat, addConfetti, addBam, addChomp, addPoof, AD_H } from './render.js';
+import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, AD_H } from './render.js';
 import { setupInput } from './input.js';
 import { screenToWorld } from './camera.js';
 
@@ -184,7 +184,9 @@ function connect(name) {
         if (e.type === 'roundStart') playSound('round');
         // local SFX (only the affected player hears)
         if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId && !firstCurd) playSound('score');
-        if (e.type === 'presentClaim' && e.id === selfId) playSound(e.fx); // per-effect sound
+        // golden curd: a global celebration — everyone sees the animation and hears it
+        if (e.type === 'presentClaim' && e.fx === 'golden_curd') { playSound('golden_curd'); addGoldenCurd(e.id); }
+        else if (e.type === 'presentClaim' && e.id === selfId) playSound(e.fx); // local per-effect sound
         if (e.type === 'presentClaim' && e.id === selfId && e.fx === 'interstitial') showInterstitial();
         if (e.type === 'explosion') {
           // a ring of splatters for the super-saiyan blast

@@ -15,6 +15,7 @@ const MANIFEST = {
   birthday_tub: 'birthday_tub.png',
   ad_app_icon: 'ad_app_icon.png',
   interstitial_ad: 'interstitial_ad.png',  // also drawn small above ad-stunned players
+  golden_curd: 'golden_curd.png',          // golden-curd buff celebration (big + kaleidoscope copies)
   splat_0: 'splat_0.png', splat_1: 'splat_1.png', splat_2: 'splat_2.png',
   mallen_face: 'mallen_face.png',          // composited onto the Mallen's head
   mallen_face_fiend: 'mallen_face_fiend.png', // ...during frenzy

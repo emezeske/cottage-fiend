@@ -458,6 +458,13 @@ export class Game {
       p.adStunUntilMs = now + EFFECT.interstitialMs; // drives the above-head ad icon for others
       p.vx = 0; p.vy = 0;
       p.charging = false;
+    } else if (fx === FX.GOLDEN_CURD) {
+      // instant point + a brief celebratory freeze (the client plays the big
+      // zoom/kaleidoscope animation, visible to everyone, for the same duration)
+      if (p.isMallen) p.eaten += 1; else p.score += 1;
+      p.stunnedUntilMs = now + EFFECT.goldenCurdMs;
+      p.vx = 0; p.vy = 0;
+      p.charging = false;
     }
   }
 

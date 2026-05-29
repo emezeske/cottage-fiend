@@ -35,6 +35,7 @@ const SFX_FILES = {
   swap: 'sfx_swap.mp3',
   pinata: 'sfx_pinata.mp3',
   interstitial: 'sfx_interstitial.mp3', // local: forced ad-break debuff jingle
+  golden_curd: 'sfx_golden_curd.mp3', // global: golden-curd celebration fanfare
   invincible_theme: 'invincible.mp3', // looped locally while you're invincible
 };
 

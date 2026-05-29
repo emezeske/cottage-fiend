@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, _resetIds } from '../server/game/game.js';
 import {
-  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL,
+  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL, BUFF_POOL,
 } from '../server/game/constants.js';
 import { seededRng } from './helpers.js';
 
@@ -437,6 +437,24 @@ test('presents roll varied effects within a round', () => {
 
 // Regression: double_speed must speed you up and half_speed slow you down — i.e.
 // the two effects (and the sounds keyed off their ids) are not swapped.
+test('golden curd: +1 point (eaten for the Mallen) and a brief freeze (one-shot buff)', () => {
+  assert.ok(ONE_SHOT.has(FX.GOLDEN_CURD), 'golden curd is a one-shot');
+  assert.ok(BUFF_POOL.some(e => e.fx === FX.GOLDEN_CURD), 'golden curd is a buff');
+  const g = newGame();
+  const crew = g.addPlayer('alice');
+  const mal = g.addPlayer('mallen');
+  g.startRound();
+  advance(g, 3200);
+  const now = g._clock;
+  const a = g.players.get(crew), m = g.players.get(mal);
+  const aScore = a.score, mEaten = m.eaten;
+  g._applyOneShot(a, FX.GOLDEN_CURD, now);
+  assert.equal(a.score, aScore + 1);
+  assert.equal(a.stunnedUntilMs, now + EFFECT.goldenCurdMs);
+  g._applyOneShot(m, FX.GOLDEN_CURD, now);
+  assert.equal(m.eaten, mEaten + 1); // the Mallen scores via 'eaten'
+});
+
 test('setForcedPresent overrides the random roll (admin testing)', () => {
   const g = newGame();
   const id = g.addPlayer('alice');
