@@ -1,7 +1,7 @@
 // Main client. Connects to the server, sends input, renders snapshots.
 
 import { loadAssets } from './assets.js';
-import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop } from './audio.js';
+import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
 import { render, addSplat, addConfetti, addBam, addChomp, addPoof, AD_H } from './render.js';
 import { setupInput } from './input.js';
 import { screenToWorld } from './camera.js';
@@ -99,8 +99,8 @@ function connect(name) {
       // invincibility theme: loops locally while you're invincible
       const meNow = snap.players.find((p) => p.id === selfId);
       const inv = !!(meNow && meNow.effect === 'invincible');
-      if (inv && !invLoopOn) { playLoop('invincible_theme', 0.5); invLoopOn = true; }
-      else if (!inv && invLoopOn) { stopLoop('invincible_theme'); invLoopOn = false; }
+      if (inv && !invLoopOn) { playLoop('invincible_theme', 0.5); duckMusic(true); invLoopOn = true; }
+      else if (!inv && invLoopOn) { stopLoop('invincible_theme'); duckMusic(false); invLoopOn = false; }
       // first-curd cue is exclusive with the regular score cue: when the round's
       // first score lands, the scorer hears only the global FIRST CURD sound.
       const firstCurd = (m.events || []).some((e) => e.type === 'firstCurd');

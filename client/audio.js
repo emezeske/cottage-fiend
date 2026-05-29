@@ -39,7 +39,7 @@ const SFX_FILES = {
 
 // Looping background music per game screen (crossfaded between).
 const MUSIC_FILES = { title: 'title.mp3', gameplay: 'gameplay.mp3', score: 'score.mp3' };
-const MUSIC_VOL = 0.05; // background music sits well under the SFX
+const MUSIC_VOL = 0.03; // background music sits well under the SFX
 const musicBuffers = {}; // name -> AudioBuffer
 const musicNodes = {};   // name -> { src, g } currently playing
 let desiredMusic = null;
@@ -125,6 +125,21 @@ export function setMusic(name, fadeMs = 700) {
   _startDesiredMusic(fadeMs);
 }
 
+// While a foreground loop (the invincibility theme) is playing, mute the
+// background music entirely, then bring it back when the loop stops.
+let musicDucked = false;
+function _musicTarget() { return musicDucked ? 0 : MUSIC_VOL; }
+export function duckMusic(on, fadeMs = 300) {
+  musicDucked = on;
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  for (const node of Object.values(musicNodes)) {
+    node.g.gain.cancelScheduledValues(t);
+    node.g.gain.setValueAtTime(node.g.gain.value, t);
+    node.g.gain.linearRampToValueAtTime(_musicTarget(), t + fadeMs / 1000);
+  }
+}
+
 function _startDesiredMusic(fadeMs) {
   const name = desiredMusic;
   if (!name || !musicBuffers[name] || musicNodes[name]) return; // not loaded, or already playing
@@ -136,7 +151,7 @@ function _startDesiredMusic(fadeMs) {
   src.connect(g).connect(ctx.destination);
   src.start();
   const t = ctx.currentTime;
-  g.gain.linearRampToValueAtTime(MUSIC_VOL, t + fadeMs / 1000);
+  g.gain.linearRampToValueAtTime(_musicTarget(), t + fadeMs / 1000);
   musicNodes[name] = { src, g };
 }
 
