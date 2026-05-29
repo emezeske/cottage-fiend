@@ -810,19 +810,6 @@ export class Game {
     return ready / this.players.size >= ROUND.readyFraction;
   }
 
-  // Guarantee an antagonist: if nobody claimed the Mallen (and we have a crew to
-  // play against), draft a player into the role so the round isn't Mallen-less.
-  // Skipped for a lone player so solo testing still works as a delivery player.
-  _ensureMallen() {
-    if (this.players.get(this.mallenId)) return; // already have a live Mallen
-    this.mallenId = null;
-    if (this.players.size < 2) return;           // 1 player: leave them as delivery
-    let pick = null;
-    for (const p of this.players.values()) { if (p.isMallen) { pick = p; break; } }
-    if (!pick) for (const p of this.players.values()) { pick = p; break; } // draft the first
-    if (pick) { pick.isMallen = true; this.mallenId = pick.id; }
-  }
-
   // Safety valve against unbounded tub growth (piñatas, misses, fast present rate
   // with many players): cull the oldest LOOSE tubs past a generous cap. Active
   // tubs (ready/carried/flying) are never culled.
@@ -838,7 +825,6 @@ export class Game {
   startRound() {
     this.roundNumber += 1;
     this._firstScored = false;
-    this._ensureMallen();
     this.loci = placeLoci(ARENA, LOCI, this.rng);
     this._computeSafeZone();
     this.tubs = [];

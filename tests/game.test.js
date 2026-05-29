@@ -71,22 +71,14 @@ test('only one Mallen — a second "mallen" joins as a delivery player', () => {
   assert.equal(g.mallenId, null); // no other Mallen to promote
 });
 
-test('startRound drafts a Mallen when nobody claimed one (2+ players)', () => {
+test('startRound never creates a Mallen — someone must join as one', () => {
   const g = newGame();
-  g.addPlayer('alice');
-  g.addPlayer('bob');
-  assert.equal(g.mallenId, null);
+  const a = g.addPlayer('alice');
+  const b = g.addPlayer('bob');
   g.startRound();
-  assert.notEqual(g.mallenId, null);
-  assert.equal(g.players.get(g.mallenId).isMallen, true);
-});
-
-test('startRound does NOT draft a Mallen for a lone player (solo stays delivery)', () => {
-  const g = newGame();
-  const id = g.addPlayer('alice');
-  g.startRound();
-  assert.equal(g.mallenId, null);
-  assert.equal(g.players.get(id).isMallen, false);
+  assert.equal(g.mallenId, null); // a Mallen-less round is fine
+  assert.equal(g.players.get(a).isMallen, false);
+  assert.equal(g.players.get(b).isMallen, false);
 });
 
 test('tapping a ready tub on the truck picks it up', () => {
