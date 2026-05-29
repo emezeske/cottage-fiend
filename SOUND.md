@@ -8,10 +8,8 @@ needed. Keep filenames exactly as listed.
   tell me and I'll change the mapping in `client/audio.js`).
 - **Length:** the SFX are short one-shots (most ≈ 0.3–1.5s, play once). The
   invincibility theme and the music tracks **loop**, so they can be longer.
-- **All one-shot SFX are real audio.** The only stand-in left is the looping
-  `sfx_dance_party_theme` (dance-party music — see the looping section). To replace
-  any clip, drop an mp3 with the same name in `client/assets/sounds/` (or hand me a
-  `.wav` and I'll convert it).
+- **All audio is real now.** To replace any clip, drop an mp3 with the same name in
+  `client/assets/sounds/` (or hand me a `.wav` and I'll convert it).
 - All audio is **preloaded** before the JOIN button enables (so the first round is
   smooth).
 
@@ -90,7 +88,7 @@ These **loop** while active, so they can be longer clips.
 | File | Folder | Plays when… | Who hears it |
 |------|--------|-------------|--------------|
 | `invincible.mp3` | `client/assets/sounds/` | **You** are invincible (the buff is active); stops when it wears off | **Local** — only the invincible player |
-| `sfx_dance_party_theme.mp3` | `client/assets/sounds/` | A **Dance Party** is active (ducks the bg theme) — *currently a STAND-IN (a copy of the score track); replace with real party music* | **Local** — the initiator + everyone dancing |
+| `sfx_dance_party_theme.mp3` | `client/assets/sounds/` | A **Dance Party** is active (ducks the bg theme) | **Local** — the initiator + everyone dancing |
 | `title.mp3` | `client/assets/music/` | On the **lobby / title** screen | Everyone (each on their own device) |
 | `gameplay.mp3` | `client/assets/music/` | During the **countdown + active round** | Everyone |
 | `score.mp3` | `client/assets/music/` | On the **leaderboard / score** screen | Everyone |
