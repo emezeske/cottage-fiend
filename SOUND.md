@@ -8,9 +8,10 @@ needed. Keep filenames exactly as listed.
   tell me and I'll change the mapping in `client/audio.js`).
 - **Length:** the SFX are short one-shots (most ≈ 0.3–1.5s, play once). The
   invincibility theme and the music tracks **loop**, so they can be longer.
-- **Most SFX are real audio.** Still placeholders to record (silent for now):
-  `sfx_corgi_attack` and `sfx_disc_golf`. To fill any clip, drop an mp3 with the
-  same name in `client/assets/sounds/` (or hand me a `.wav` and I'll convert it).
+- **All one-shot SFX are real audio.** The only stand-in left is the looping
+  `sfx_dance_party_theme` (dance-party music — see the looping section). To replace
+  any clip, drop an mp3 with the same name in `client/assets/sounds/` (or hand me a
+  `.wav` and I'll convert it).
 - All audio is **preloaded** before the JOIN button enables (so the first round is
   smooth).
 
@@ -50,16 +51,16 @@ debuffs, and never curd cannon since he can't throw).
 
 | File | Effect |
 |------|--------|
-| `sfx_double_speed.mp3` | move twice as fast |
+| `sfx_double_speed.mp3` | move twice as fast (you turn into a Ferrari — it's the engine sound) |
 | `sfx_two_x_points.mp3` | next delivery / devour counts double |
 | `sfx_invincible.mp3` | can't be attacked, shoved, or stunned |
 | `sfx_explosion.mp3` | one-shot blast that knocks everyone back |
 | `sfx_magnet.mp3` | pulls loose tubs toward you |
 | `sfx_curd_cannon.mp3` | next throw flies ~10× as far (delivery only) |
 | `sfx_golden_curd.mp3` | instant +1 point with the big celebration |
-| `sfx_corgi_attack.mp3` | spawns a hunter corgi *(placeholder — record this one)* |
-| `sfx_disc_golf.mp3` | periodically flings frisbees that bonk others *(placeholder — record this one)* |
-| `sfx_dance_party.mp3` | the power-up cue when you grab Dance Party *(placeholder — record this one)* |
+| `sfx_corgi_attack.mp3` | spawns a hunter corgi |
+| `sfx_disc_golf.mp3` | periodically flings frisbees that bonk others |
+| `sfx_dance_party.mp3` | the power-up cue when you grab Dance Party (the looping party music is separate) |
 
 **Curses (bad):**
 
