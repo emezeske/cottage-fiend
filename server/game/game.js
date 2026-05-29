@@ -678,9 +678,23 @@ export class Game {
   }
 
   _applyMagnets(dt) {
+    const now = this._clock || 0;
     for (const p of this.players.values()) {
       if (p.effect !== FX.MAGNET) continue;
       for (const t of this.tubs) {
+        // rip a tub out of another player's hands if they're inside the pull range
+        // (invincible players are immune, matching the rest of the game)
+        if (t.state === 'carried' && t.carrierId !== p.id) {
+          const o = this.players.get(t.carrierId);
+          if (o && o.effect !== FX.INVINCIBLE && dist(p.x, p.y, o.x, o.y) < EFFECT.magnetRadius) {
+            t.state = 'loose'; t.carrierId = null;
+            t.x = o.x; t.y = o.y;
+            o.carryingTubId = null;
+            // brief grace so the victim doesn't instantly snatch it back as it flies off
+            o.noPickupUntilMs = Math.max(o.noPickupUntilMs || 0, now + 400);
+            this.events.push({ type: 'drop', x: o.x, y: o.y });
+          }
+        }
         if (t.state !== 'loose' && t.state !== 'ready') continue;
         const d = dist(p.x, p.y, t.x, t.y);
         if (d > 0 && d < EFFECT.magnetRadius) {
@@ -691,7 +705,7 @@ export class Game {
             // pulled off the truck — refill on the normal 1s timer (not the
             // instant safety-net respawn), so the magnet can't spawn infinite tubs
             t.state = 'loose';
-            this._scheduleTruckRefill(this._clock || 0);
+            this._scheduleTruckRefill(now);
           }
         }
       }

@@ -551,6 +551,40 @@ test('dance party: a moving aura forces anyone in radius to dance and drop their
   assert.ok(g.players.get(far).danceUntilMs > g._clock, 'far joins once inside the radius');
 });
 
+test('magnet rips a carried tub out of a nearby player and pulls it toward the holder', () => {
+  const g = newGame();
+  const holder = g.addPlayer('holder');
+  const victim = g.addPlayer('victim');
+  const farPlayer = g.addPlayer('farPlayer');
+  g.startRound();
+  advance(g, 3200);
+  const h = g.players.get(holder), v = g.players.get(victim), fp = g.players.get(farPlayer);
+  h.x = 800; h.y = 800; v.x = 900; v.y = 800; fp.x = 800; fp.y = 1400; // victim in range, far out
+  const vt = giveTub(g, victim); giveTub(g, farPlayer);
+  h.effect = FX.MAGNET; h.effectUntilMs = g._clock + 6000;
+  const before = vt.x;
+  advance(g, 50);
+  assert.equal(v.carryingTubId, null, 'victim lost their tub');
+  assert.equal(vt.state, 'loose', 'tub is loose again');
+  assert.ok(vt.x < before, 'tub is being pulled toward the magnet holder');
+  assert.notEqual(fp.carryingTubId, null, 'far player keeps their tub');
+});
+
+test('magnet does NOT rip a tub from an invincible carrier', () => {
+  const g = newGame();
+  const holder = g.addPlayer('holder');
+  const tank = g.addPlayer('tank');
+  g.startRound();
+  advance(g, 3200);
+  const h = g.players.get(holder), t = g.players.get(tank);
+  h.x = 800; h.y = 800; t.x = 900; t.y = 800;
+  giveTub(g, tank);
+  t.effect = FX.INVINCIBLE; t.effectUntilMs = g._clock + 6000;
+  h.effect = FX.MAGNET;     h.effectUntilMs = g._clock + 6000;
+  advance(g, 50);
+  assert.notEqual(t.carryingTubId, null, 'invincible carrier keeps their tub');
+});
+
 test('dominating cue fires once (for the leader) when 5+ points ahead', () => {
   const g = newGame();
   const a = g.addPlayer('alice');
