@@ -5,11 +5,8 @@
 
 const FILE_SOUNDS = {
   // event -> filename in assets/sounds/ (optional). Leave empty to stay procedural.
-  // chomp: 'chomp.mp3',
-  // splat: 'splat.wav',
-  // throw: 'whoosh.wav',
-  // score: 'ding.wav',
-  // roundEnd: 'cheer.wav',
+  // A file here overrides the procedural version and plays globally on the event.
+  roundEnd: 'sfx_round_over.mp3', // "round over" sting on the leaderboard
 };
 
 // Named SFX files (placeholders — all currently the same test clip; overwrite
@@ -19,7 +16,9 @@ const SFX_FILES = {
   firstCurd: 'sfx_first_curd.mp3', // global: first score of the round
   round: 'sfx_round.mp3',        // global: round start
   score: 'sfx_score.mp3',        // local: you scored
-  ad: 'sfx_ad.mp3',              // local: tapped the top ad banner
+  ad1: 'sfx_ad_1.mp3',           // local: tapped the top ad banner (one of 3 picked at random)
+  ad2: 'sfx_ad_2.mp3',
+  ad3: 'sfx_ad_3.mp3',
   // local: one per power-up / curse / wildcard effect (keyed by effect id)
   double_speed: 'sfx_double_speed.mp3',
   two_x_points: 'sfx_two_x_points.mp3',
@@ -40,7 +39,7 @@ const SFX_FILES = {
 
 // Looping background music per game screen (crossfaded between).
 const MUSIC_FILES = { title: 'title.mp3', gameplay: 'gameplay.mp3', score: 'score.mp3' };
-const MUSIC_VOL = 0.15; // background music sits well under the SFX
+const MUSIC_VOL = 0.05; // background music sits well under the SFX
 const musicBuffers = {}; // name -> AudioBuffer
 const musicNodes = {};   // name -> { src, g } currently playing
 let desiredMusic = null;
@@ -86,7 +85,7 @@ export function initAudio() {
 }
 
 // Play a named SFX clip (see SFX_FILES). No-op until loaded.
-export function playSound(name, gain = 0.6) {
+export function playSound(name, gain = 0.9) {
   if (!ctx || !sfx[name]) return;
   if (ctx.state === 'suspended' && !document.hidden) ctx.resume();
   playBuffer(sfx[name], gain);
@@ -190,36 +189,13 @@ function noiseBurst({ dur = 0.2, gain = 0.3, lp = 2000 }) {
   src.start();
 }
 
-// Crowd applause: a swell of band-passed noise peppered with random "claps".
-function applause({ dur = 1.1, gain = 0.3 }) {
-  const n = Math.floor(ctx.sampleRate * dur);
-  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) {
-    const t = i / n;
-    const swell = Math.sin(Math.min(1, t * 4) * Math.PI / 2) * (1 - t * 0.55);
-    const clap = Math.random() < 0.45 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.25;
-    data[i] = clap * swell;
-  }
-  const src = ctx.createBufferSource(); src.buffer = buf;
-  const filt = ctx.createBiquadFilter(); filt.type = 'bandpass';
-  filt.frequency.value = 1900; filt.Q.value = 0.6;
-  const g = ctx.createGain(); g.gain.value = gain;
-  src.connect(filt).connect(g).connect(ctx.destination);
-  src.start();
-}
-
 // Map each game event to a synthesized sound.
 const PROCEDURAL = {
   pickup: () => tone({ type: 'square', freq: 520, dur: 0.08, gain: 0.15, slideTo: 740 }),
   throw:  () => { noiseBurst({ dur: 0.25, gain: 0.25, lp: 1200 });
                   tone({ type: 'sawtooth', freq: 300, dur: 0.2, gain: 0.1, slideTo: 120 }); },
   splat:  () => noiseBurst({ dur: 0.18, gain: 0.4, lp: 900 }),
-  score:  () => { // delivery! a little cheer + crowd applause
-    applause({ dur: 1.2, gain: 0.32 });
-    [660, 880, 1320].forEach((f, i) =>
-      setTimeout(() => tone({ type: 'square', freq: f, dur: 0.16, gain: 0.18 }), i * 90));
-  },
+  // score: handled entirely by the local sfx_score.mp3 cue now (see main.js)
   attack: () => tone({ type: 'square', freq: 180, dur: 0.06, gain: 0.18, slideTo: 90 }),
   drop:   () => tone({ type: 'triangle', freq: 220, dur: 0.2, gain: 0.18, slideTo: 80 }),
   chomp:  () => { // comically messy animal devour

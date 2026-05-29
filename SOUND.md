@@ -8,8 +8,8 @@ needed. Keep filenames exactly as listed.
   tell me and I'll change the mapping in `client/audio.js`).
 - **Length:** the SFX are short one-shots (most ≈ 0.3–1.5s, play once). The
   invincibility theme and the music tracks **loop**, so they can be longer.
-- SFX clips are currently placeholder copies of one test clip; the music tracks and
-  the invincibility theme are real audio.
+- **All SFX are now real audio** (no placeholders left). To replace any clip, just
+  overwrite its file in `client/assets/sounds/` with the same name.
 - All audio is **preloaded** before the JOIN button enables (so the first round is
   smooth).
 
@@ -22,8 +22,9 @@ needed. Keep filenames exactly as listed.
 | `sfx_dash.mp3` | The Mallen **dashes** (his ATTACK lunge) | Everyone, but **volume falls off with distance** from the Mallen — loud up close, silent across the map |
 | `sfx_first_curd.mp3` | The **first score of the round** by anyone — a delivery player delivering OR the Mallen devouring his first tub. Fires **once per round** | **Global** (everyone, full volume) |
 | `sfx_round.mp3` | A **round starts** (the "ROUND N: CURD" intro, during the countdown) | **Global** |
+| `sfx_round_over.mp3` | A **round ends** (the leaderboard "round over" sting) | **Global** |
 | `sfx_score.mp3` | **You score** — a delivery player delivering a tub to the fridge, or the Mallen devouring a tub | **Local** — only the scorer |
-| `sfx_ad.mp3` | **You tap the top ad banner** | **Local** — only the tapper |
+| `sfx_ad_1.mp3` / `_2` / `_3` | **You tap the top ad banner** — one of the three is picked at random | **Local** — only the tapper |
 
 Presents play a **per-effect** sound (see the next section) instead of one generic powerup/curse cue.
 
@@ -115,7 +116,7 @@ synthesized version. These play **globally** (every player) when their event fir
 | `explosion` | the explosion power-up knockback |
 | `swap` | the swap-positions wildcard |
 | `pinata` | the tub-piñata wildcard |
-| `roundEnd` | a round is won |
+| `roundEnd` | a round is won — **now wired to `sfx_round_over.mp3`** (overrides the synth) |
 | `join` | a player joins |
 
 > Want any of these promoted to a dedicated named slot (like the six above) or

@@ -339,9 +339,13 @@ export class Game {
   }
 
   // ---- presents & effects -------------------------------------------------
+  // Presents arrive proportionally to the player count: the interval is divided
+  // by the number of players so each player sees ~the same present rate whether
+  // it's a 2-player or a 12-player game.
   _scheduleNextPresent(now) {
     const span = PRESENT.spawnMaxMs - PRESENT.spawnMinMs;
-    this._nextPresentAt = now + PRESENT.spawnMinMs + this.rng() * span;
+    const base = PRESENT.spawnMinMs + this.rng() * span;
+    this._nextPresentAt = now + base / Math.max(1, this.players.size);
   }
 
   _spawnPresent(now) {
@@ -359,7 +363,10 @@ export class Game {
 
   _updatePresents(dt, now) {
     if (this._nextPresentAt == null) this._scheduleNextPresent(now);
-    if (now >= this._nextPresentAt && this.presents.length < PRESENT.maxOnField) {
+    // raise the on-field cap with player count so it never throttles the faster
+    // spawn rate (presents get claimed quickly when there are many players).
+    const cap = Math.max(PRESENT.maxOnField, Math.ceil(this.players.size / 2));
+    if (now >= this._nextPresentAt && this.presents.length < cap) {
       this._spawnPresent(now);
       this._scheduleNextPresent(now);
     }

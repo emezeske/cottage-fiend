@@ -101,6 +101,9 @@ function connect(name) {
       const inv = !!(meNow && meNow.effect === 'invincible');
       if (inv && !invLoopOn) { playLoop('invincible_theme', 0.5); invLoopOn = true; }
       else if (!inv && invLoopOn) { stopLoop('invincible_theme'); invLoopOn = false; }
+      // first-curd cue is exclusive with the regular score cue: when the round's
+      // first score lands, the scorer hears only the global FIRST CURD sound.
+      const firstCurd = (m.events || []).some((e) => e.type === 'firstCurd');
       for (const e of m.events || []) {
         playEvent(e.type);
         if (e.type === 'splat' || e.type === 'drop' ||
@@ -124,7 +127,7 @@ function connect(name) {
         if (e.type === 'firstCurd') playSound('firstCurd');
         if (e.type === 'roundStart') playSound('round');
         // local SFX (only the affected player hears)
-        if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId) playSound('score');
+        if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId && !firstCurd) playSound('score');
         if (e.type === 'presentClaim' && e.id === selfId) playSound(e.fx); // per-effect sound
         if (e.type === 'explosion') {
           // a ring of splatters for the super-saiyan blast
@@ -237,18 +240,26 @@ canvas.addEventListener('pointerup', (e) => {
   if (!adTapStart) return;
   const moved = Math.hypot(e.clientX - adTapStart.x, e.clientY - adTapStart.y);
   const r = canvas.getBoundingClientRect();
-  if (moved < 12 && e.clientY - r.top <= AD_H) playSound('ad');
+  if (moved < 12 && e.clientY - r.top <= AD_H) playSound(['ad1', 'ad2', 'ad3'][Math.random() * 3 | 0]);
   adTapStart = null;
 });
 
 // UI buttons
+// JOIN is enabled only once everything has preloaded AND a name has been typed —
+// players must name themselves, there is no default.
+let assetsLoaded = false;
+function updateJoinEnabled() {
+  joinBtn.disabled = !assetsLoaded || nameInput.value.trim() === '';
+}
 joinBtn.onclick = () => {
-  const name = (nameInput.value || 'delivery').trim().slice(0, 16);
+  const name = nameInput.value.trim().slice(0, 16);
+  if (!name) { nameInput.focus(); return; }
   initAudio();
   fitCanvas();
   overlay.style.display = 'none';
   connect(name);
 };
+nameInput.addEventListener('input', updateJoinEnabled);
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.click(); });
 goBtn.onclick = () => { initAudio(); send(MSG.READY); };
 
@@ -320,8 +331,9 @@ const joinLabel = joinBtn.textContent;
 joinBtn.disabled = true;
 joinBtn.textContent = 'LOADING…';
 Promise.all([assetsReady, audioReady]).then(() => {
-  joinBtn.disabled = false;
+  assetsLoaded = true;
   joinBtn.textContent = joinLabel;
+  updateJoinEnabled();                   // stays disabled until a name is entered
 });
 assetsReady.then(() => {
   fitCanvas();
