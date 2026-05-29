@@ -103,6 +103,10 @@ const PROCEDURAL = {
     tone({ type: 'sawtooth', freq: 90, dur: 0.3, gain: 0.25, slideTo: 50 });
     setTimeout(() => noiseBurst({ dur: 0.2, gain: 0.4, lp: 600 }), 120);
   },
+  stun:   () => { // dazed warble (devour shockwave)
+    tone({ type: 'sine', freq: 700, dur: 0.45, gain: 0.18, slideTo: 180 });
+    setTimeout(() => tone({ type: 'sine', freq: 520, dur: 0.4, gain: 0.14, slideTo: 140 }), 110);
+  },
   roundEnd: () => {
     [523, 659, 784, 1046].forEach((f, i) =>
       setTimeout(() => tone({ type: 'square', freq: f, dur: 0.18, gain: 0.2 }), i * 110));

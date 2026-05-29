@@ -172,7 +172,7 @@ test('mallen punch knocks the carried tub loose in one hit', () => {
   g.phase = PHASE.PLAYING;
   const v = g.players.get(victim), m = g.players.get(mid);
   giveTub(g, victim);
-  v.x = 400; v.y = 400; m.x = 420; m.y = 400; m.dir = { x: 1, y: 0 };
+  v.x = 400; v.y = 400; m.x = 420; m.y = 400; m.dir = { x: -1, y: 0 }; // face the victim (punch lunges that way)
   g.punch(mid, 0);
   assert.equal(g.players.get(victim).carryingTubId, null, 'victim lost the tub in one punch');
   // the tub is now in play (flying away, or already loose/devoured by the mallen)
@@ -238,6 +238,26 @@ test('mallen devours a loose tub, gains frenzy and eaten count', () => {
   // the loose tub he ate is gone (a ready tub may appear on the truck via the
   // restock safety net, which is fine — just assert the eaten one is gone)
   assert.equal(g.tubs.some(t => t.id === tub.id), false);
+});
+
+test('mallen devouring stuns nearby players and makes them drop their tubs', () => {
+  const g = newGame();
+  const victim = g.addPlayer('victim');
+  const mid = g.addPlayer('mallen');
+  const faraway = g.addPlayer('far');
+  g.phase = PHASE.PLAYING;
+  const v = g.players.get(victim), m = g.players.get(mid), fp = g.players.get(faraway);
+  m.x = 800; m.y = 800;
+  v.x = 850; v.y = 800;          // near the mallen
+  fp.x = 1500; fp.y = 1500;      // far away
+  giveTub(g, victim);
+  g._spawnTub(800, 800);         // a loose tub on the mallen to devour
+  g.tick(33);
+  const now = g._clock;
+  assert.ok(g.players.get(mid).eaten >= 1, 'mallen devoured');
+  assert.ok(g.players.get(victim).stunnedUntilMs > now, 'nearby victim is stunned');
+  assert.equal(g.players.get(victim).carryingTubId, null, 'stunned victim dropped their tub');
+  assert.ok(!(g.players.get(faraway).stunnedUntilMs > now), 'far-away player is not stunned');
 });
 
 test('frenzy expires and mallen returns to normal size', () => {

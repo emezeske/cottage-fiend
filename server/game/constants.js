@@ -19,7 +19,7 @@ export const PLAYER = {
 export const MALLEN = {
   name: 'mallen',            // case-insensitive match claims the role
   radius: 34,                // bigger than everyone
-  speed: 190,                // a little slower than deliveries
+  speed: 230,                // same as deliveries (frenzy still makes him faster)
   attackRange: 70,           // auto-attack proximity (center distance)
   attackCooldownMs: 600,     // time between auto hits
   hitsToDrop: 2,             // hits before a victim drops their tub
@@ -32,6 +32,13 @@ export const FRENZY = {
   sizeMult: 1.5,
   speedMult: 1.35,
   attackCdMult: 0.6,         // attacks faster (lower cooldown)
+};
+
+// When the Mallen devours a tub, everyone nearby is stunned: frozen + drops their
+// tub for a couple seconds. Invincible players resist.
+export const STUN = {
+  radius: 340,               // wide shockwave radius
+  durationMs: 2000,
 };
 
 // --- Tubs / throwing -------------------------------------------------------
@@ -49,6 +56,7 @@ export const PUNCH = {
   cooldownMs: 450,           // min time between delivery punches (Mallen uses MALLEN.attackCooldownMs)
   launchSpeed: 520,          // px/sec the knocked-loose tub flies
   knockback: 26,             // px the punched player is shoved
+  mallenDash: 85,            // px the Mallen lunges forward when he punches (skill-based)
 };
 
 // Player-vs-player contact: the mover shoves whoever they run into.
@@ -177,6 +185,10 @@ export const WILDCARD_POOL = [
   { fx: FX.SWAP,    w: 1 },
   { fx: FX.PINATA,  w: 2 },
 ];
+
+// The Mallen only rolls buffs that actually apply to him — he can't throw, so the
+// curd cannon (a throw buff) is excluded.
+export const MALLEN_BUFF_POOL = BUFF_POOL.filter((e) => e.fx !== FX.CURD_CANNON);
 
 // One-shot effects (applied instantly, no active duration).
 export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA]);

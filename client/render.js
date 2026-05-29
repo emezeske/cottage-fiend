@@ -7,7 +7,7 @@ import { computeCamera, getCamera } from './camera.js';
 
 const PHASE = { LOBBY: 'lobby', COUNTDOWN: 'countdown', PLAYING: 'playing', LEADERBOARD: 'leaderboard' };
 
-const AD_H = 58; // height of the top ad banner (CSS px); HUD sits below it
+const AD_H = 70; // height of the top ad banner (CSS px); HUD sits below it
 
 const EFFECT_LABELS = {
   double_speed: '⚡2X SPEED', two_x_points: '2X PTS', invincible: '🛡INVINCIBLE',
@@ -277,16 +277,26 @@ function dir8(dx, dy) {
 
 function drawPlayer(ctx, p, frame, isSelf) {
   const dir = dir8(p.dir.x, p.dir.y);
-  const f = p.moving ? frame : 0;   // stand on frame 0 when not moving
+  const tnow = performance.now();
+  // stunned = rapid frame flicker; otherwise walk only while moving
+  const f = p.stunned ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
   let img;
   if (p.isMallen) img = images[`mallen${p.frenzy ? '_frenzy' : ''}_${dir}_${f}`];
   else img = images[`delivery_${p.spriteIndex}_${dir}_${f}`];
   // full-body sprites are drawn a bit taller than the collision circle and nudged
   // up so the feet sit near the player position
   const size = p.radius * 3.0;
+  let px = p.x;
   const cy = p.y - size * 0.12;
+  if (p.stunned) px += (Math.random() - 0.5) * 4; // jitter/shake
 
-  if (p.isMallen && p.frenzy) {
+  if (p.stunned) {
+    ctx.save();
+    ctx.shadowColor = `hsl(${(tnow * 0.8) % 360},100%,62%)`; // rapid color flash
+    ctx.shadowBlur = 22;
+    drawSprite(ctx, img, px, cy + (Math.random() - 0.5) * 4, size, size);
+    ctx.restore();
+  } else if (p.isMallen && p.frenzy) {
     ctx.save();
     ctx.shadowColor = `hsl(${(walkClock * 20) % 360},90%,60%)`;
     ctx.shadowBlur = 25;
@@ -305,7 +315,12 @@ function drawPlayer(ctx, p, frame, isSelf) {
   ctx.fillStyle = isSelf ? '#ffe14d' : '#fff';
   ctx.fillText(p.name, p.x, topY);
 
-  if (p.effect) {
+  if (p.stunned) {
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillStyle = '#9fefff';
+    ctx.strokeText('💫 STUNNED 💫', p.x, topY - 16);
+    ctx.fillText('💫 STUNNED 💫', p.x, topY - 16);
+  } else if (p.effect) {
     const label = EFFECT_LABELS[p.effect] || p.effect;
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.fillStyle = BUFF_SET.has(p.effect) ? '#8f8' : '#f88';
@@ -366,13 +381,14 @@ function locusArrow(ctx, cssW, cssH, target, label, color) {
 }
 
 // ---- the single fake mobile-game ad banner --------------------------------
+// [title, subtitle, rating (0.5–1.5 stars — terrible), installs (absurdly high)]
 const AD_SLOGANS = [
-  ['CURD CLASH', 'Build your DAIRY EMPIRE!'],
-  ['MERGE CHEESE TYCOON', '100,000,000 curds served'],
-  ['LUCERNE LEGENDS', 'Collect & BATTLE tubs!'],
-  ['IDLE COTTAGE EMPIRE', 'Tap to get RICH in curds 💰'],
-  ['COTTAGE CRUSH SAGA', 'Match-3 the curds, WIN BIG'],
-  ['FIEND FIGHTERS 3D', 'Can YOU defeat The Mallen?'],
+  ['CURD CLASH', 'Build your DAIRY EMPIRE!', 0.5, '500M+'],
+  ['MERGE CHEESE TYCOON', '100,000,000 curds served', 1.5, '1.2B+'],
+  ['LUCERNE LEGENDS', 'Collect & BATTLE tubs!', 1.0, '900M+'],
+  ['IDLE COTTAGE EMPIRE', 'Tap to get RICH in curds 💰', 0.5, '2B+'],
+  ['COTTAGE CRUSH SAGA', 'Match-3 the curds, WIN BIG', 1.5, '750M+'],
+  ['FIEND FIGHTERS 3D', 'Can YOU defeat The Mallen?', 1.0, '3B+'],
 ];
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -381,9 +397,39 @@ function roundRect(ctx, x, y, w, h, r) {
   else ctx.rect(x, y, w, h);
 }
 
+// a 5-point star path centered at (cx,cy)
+function star5(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const ang = -Math.PI / 2 + i * Math.PI / 5;
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+}
+
+// draw a 5-star rating filled left-to-right to `rating` (supports halves);
+// returns the x of the right edge so following text can be placed after it
+function drawStars(ctx, x, cy, rating, r) {
+  const gap = r * 2.3;
+  for (let i = 0; i < 5; i++) {
+    const cx = x + r + i * gap;
+    star5(ctx, cx, cy, r); ctx.fillStyle = '#d8d2c2'; ctx.fill();
+    const frac = Math.max(0, Math.min(1, rating - i));
+    if (frac > 0) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(cx - r, cy - r, 2 * r * frac, 2 * r); ctx.clip();
+      star5(ctx, cx, cy, r); ctx.fillStyle = '#f5a623'; ctx.fill();
+      ctx.restore();
+    }
+  }
+  return x + 5 * gap;
+}
+
 function drawTopAd(ctx, cssW) {
   const h = AD_H;
-  const [title, sub] = AD_SLOGANS[((walkClock / 300) | 0) % AD_SLOGANS.length];
+  const [title, sub, rating, installs] = AD_SLOGANS[((walkClock / 300) | 0) % AD_SLOGANS.length];
 
   // banner background
   const g = ctx.createLinearGradient(0, 0, 0, h);
@@ -400,10 +446,10 @@ function drawTopAd(ctx, cssW) {
   ctx.textAlign = 'left'; ctx.fillText('Ad', 11, 16);
 
   // INSTALL button geometry (computed first so text can avoid overlapping it)
-  const bw = 88, bh = 30, bx = cssW - bw - 12, by = (h - bh) / 2;
+  const bw = 92, bh = 32, bx = cssW - bw - 12, by = (h - bh) / 2;
 
   // app icon (the Lucerne tub) in a rounded square
-  const ix = 40, iy = 8, isz = h - 16;
+  const ix = 40, iy = 9, isz = h - 18;
   ctx.fillStyle = '#ffffff'; roundRect(ctx, ix, iy, isz, isz, 9); ctx.fill();
   ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; ctx.stroke();
   ctx.save(); roundRect(ctx, ix, iy, isz, isz, 9); ctx.clip();
@@ -412,21 +458,26 @@ function drawTopAd(ctx, cssW) {
   else { ctx.fillStyle = '#e8e6d8'; ctx.fillRect(ix, iy, isz, isz); }
   ctx.restore();
 
-  // title + subtitle + stars, constrained to the space before the button
+  // title + subtitle, constrained to the space before the button
   const tx = ix + isz + 12;
   const maxW = Math.max(40, bx - tx - 10); // condense text instead of clipping it
   ctx.textAlign = 'left';
   ctx.fillStyle = '#1e1814'; ctx.font = 'bold 17px system-ui, sans-serif';
   ctx.fillText(title, tx, 25, maxW);
   ctx.fillStyle = '#5a564a'; ctx.font = '12px system-ui, sans-serif';
-  ctx.fillText(sub, tx, 41, maxW);
-  ctx.fillStyle = '#f5a623'; ctx.font = '12px system-ui, sans-serif';
-  ctx.fillText('★★★★★ (4.7) · 9M+', tx, 54, maxW);
+  ctx.fillText(sub, tx, 42, maxW);
+
+  // rating stars (terrible) + absurd install count
+  const starsY = 56;
+  const afterStars = drawStars(ctx, tx, starsY, rating, 5.5);
+  ctx.fillStyle = '#5a564a'; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left';
+  const ratingTx = afterStars + 7;
+  ctx.fillText(`(${rating.toFixed(1)}) · ${installs}`, ratingTx, starsY + 4, Math.max(20, bx - ratingTx - 8));
 
   // INSTALL button (fake)
-  ctx.fillStyle = '#34c759'; roundRect(ctx, bx, by, bw, bh, 15); ctx.fill();
+  ctx.fillStyle = '#34c759'; roundRect(ctx, bx, by, bw, bh, 16); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.font = 'bold 14px system-ui, sans-serif';
-  ctx.textAlign = 'center'; ctx.fillText('INSTALL', bx + bw / 2, by + 20);
+  ctx.textAlign = 'center'; ctx.fillText('INSTALL', bx + bw / 2, by + 21);
 }
 
 function drawHUD(ctx, cssW, cssH, state, selfId) {

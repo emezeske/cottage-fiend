@@ -123,6 +123,7 @@ function stopMoving() {
 function steer() {
   const p = me();
   if (!p || !dragPos) return;
+  if (p.stunned) return;   // frozen — can't move
   const target = screenToWorld(dragPos.x, dragPos.y);
   let vx = target.x - p.x, vy = target.y - p.y;
   const len = Math.hypot(vx, vy);
@@ -157,7 +158,7 @@ function endThrow() {
 function onActionDown(e) {
   if (e) e.preventDefault();
   const p = me();
-  if (!p || charge.active) return;
+  if (!p || charge.active || p.stunned) return;
   if (p.carrying) startThrow(e);   // hold to charge a throw
   else send(MSG.PUNCH);            // empty-handed (or Mallen): punch
 }

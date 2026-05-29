@@ -29,11 +29,12 @@ test('weightedPick always returns a member of the pool', () => {
   }
 });
 
-test('mallen only ever rolls buffs (its birthday)', () => {
+test('mallen only ever rolls buffs that apply to him (never curd cannon)', () => {
   const buffs = new Set(BUFF_POOL.map(e => e.fx));
   for (let seed = 1; seed <= 300; seed++) {
     const fx = rollEffect(true, seededRng(seed));
     assert.ok(buffs.has(fx), `mallen got non-buff ${fx} at seed ${seed}`);
+    assert.notEqual(fx, FX.CURD_CANNON, `mallen got the throw-only curd cannon at seed ${seed}`);
   }
 });
 

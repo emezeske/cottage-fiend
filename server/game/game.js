@@ -6,7 +6,7 @@
 
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
-  PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE,
+  PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN,
 } from './constants.js';
 import { dist, normalize, resolveCircleOverlap, clampToArena, chargePower } from './vec.js';
 import { placeLoci, randSpawn } from './spawn.js';
@@ -63,6 +63,7 @@ export class Game {
       cannonArmed: false,         // curd cannon: next throw auto-scores
       greaseGrabMs: -1,           // clock time greased player grabbed (-1 = none)
       noPickupUntilMs: 0,         // auto-pickup suppressed until this clock time (after a forced drop)
+      stunnedUntilMs: 0,          // frozen (can't act) until this clock time (Mallen devour shockwave)
     };
     this.players.set(id, p);
     if (isMallen && this.mallenId == null) this.mallenId = id;
@@ -100,6 +101,7 @@ export class Game {
   pickup(id, nowMs) {
     const p = this.players.get(id);
     if (!p || p.isMallen || p.carryingTubId != null) return;
+    if (nowMs < p.stunnedUntilMs) return;
     // grab the nearest tappable tub within reach: a 'ready' tub on the truck, or
     // a 'loose' tub on the ground. First come, first serve.
     const reach = p.radius + TUB.radius + 28;
@@ -135,7 +137,7 @@ export class Game {
     const reach = PLAYER.radius + TUB.radius + 6; // must actually run onto it
     for (const p of this.players.values()) {
       if (p.isMallen || p.carryingTubId != null) continue;
-      if (now < p.noPickupUntilMs) continue;
+      if (now < p.noPickupUntilMs || now < p.stunnedUntilMs) continue;
       const best = this._nearestGrabbableTub(p, reach);
       if (best) this._grabTub(p, best, now);
     }
@@ -144,6 +146,7 @@ export class Game {
   startCharge(id, nowMs) {
     const p = this.players.get(id);
     if (!p || p.carryingTubId == null) return;
+    if (nowMs < p.stunnedUntilMs) return;
     p.charging = true;
     p.chargeStartMs = nowMs;
   }
@@ -151,6 +154,7 @@ export class Game {
   release(id, nowMs) {
     const p = this.players.get(id);
     if (!p || !p.charging || p.carryingTubId == null) return;
+    if (nowMs < p.stunnedUntilMs) return;
     const elapsed = nowMs - p.chargeStartMs;
     let power = chargePower(elapsed, THROW);
     const t = this.tubs.find(t => t.id === p.carryingTubId);
@@ -186,6 +190,7 @@ export class Game {
   punch(id, now) {
     const p = this.players.get(id);
     if (!p) return;
+    if (now < p.stunnedUntilMs) return;              // stunned: can't act
     if (p.isMallen && now < p.eatingUntilMs) return; // mid-chomp
     const cd = p.isMallen
       ? (p.frenzyMs > 0 ? MALLEN.attackCooldownMs * FRENZY.attackCdMult : MALLEN.attackCooldownMs)
@@ -193,6 +198,13 @@ export class Game {
     if (now - p.lastAttackMs < cd) return;
     p.lastAttackMs = now;
     this.events.push({ type: 'attack', x: p.x, y: p.y });
+
+    // The Mallen lunges forward when he punches — a skill-based dash to close on
+    // fleeing delivery folk (you commit to your facing direction).
+    if (p.isMallen) {
+      p.x += p.dir.x * PUNCH.mallenDash;
+      p.y += p.dir.y * PUNCH.mallenDash;
+    }
 
     const range = p.isMallen ? MALLEN.attackRange : p.radius + PUNCH.reach;
     let target = null, td = Infinity;
@@ -456,8 +468,8 @@ export class Game {
     // movement (all phases let you wander, but scoring only in PLAYING)
     for (const p of this.players.values()) {
       const speed = this._effectiveSpeed(p);
-      // mallen locked during eat animation
-      const locked = p.isMallen && now < p.eatingUntilMs;
+      // locked = mallen mid-chomp, or anyone stunned by a Mallen devour
+      const locked = (p.isMallen && now < p.eatingUntilMs) || now < p.stunnedUntilMs;
       if (!locked) {
         const tvx = p.moveInput.x * speed, tvy = p.moveInput.y * speed;
         if (p.effect === FX.BANANA) {
@@ -470,6 +482,8 @@ export class Game {
         }
         p.x += p.vx * dt;
         p.y += p.vy * dt;
+      } else {
+        p.vx = 0; p.vy = 0;        // frozen: no coasting through a stun
       }
       const c = clampToArena(p.x, p.y, p.radius, ARENA);
       p.x = c.x; p.y = c.y;
@@ -675,6 +689,29 @@ export class Game {
                        name: scorer ? scorer.name : null });
   }
 
+  // Mallen devour shockwave: stun every nearby delivery player (freeze + drop
+  // their tub) for a couple seconds. Invincible players resist.
+  _stunNearby(m, now) {
+    let hit = false;
+    for (const p of this.players.values()) {
+      if (p.isMallen || p.effect === FX.INVINCIBLE) continue;
+      if (dist(m.x, m.y, p.x, p.y) > STUN.radius) continue;
+      p.stunnedUntilMs = now + STUN.durationMs;
+      p.vx = 0; p.vy = 0;
+      p.charging = false;
+      if (p.carryingTubId != null) {
+        const t = this.tubs.find((t) => t.id === p.carryingTubId);
+        if (t) { t.state = 'loose'; t.carrierId = null; }
+        p.carryingTubId = null;
+        p.hitsTaken = 0;
+        p.noPickupUntilMs = now + STUN.durationMs; // can't re-grab while stunned
+        this.events.push({ type: 'drop', x: p.x, y: p.y });
+      }
+      hit = true;
+    }
+    if (hit) this.events.push({ type: 'stun', x: m.x, y: m.y });
+  }
+
   // The Mallen attacks via the same PUNCH action as everyone (see punch()); this
   // only handles auto-devouring loose tubs it walks over.
   _mallenLogic(now) {
@@ -692,6 +729,7 @@ export class Game {
         m.frenzyMs = FRENZY.durationMs;
         m.radius = this._computeRadius(m); // reflect frenzy growth immediately
         this.events.push({ type: 'chomp', x: m.x, y: m.y });
+        this._stunNearby(m, now);
         break;
       }
     }
@@ -739,7 +777,7 @@ export class Game {
       p.radius = p.isMallen ? MALLEN.radius : PLAYER.radius;
       p.ready = false;
       p.effect = null; p.effectUntilMs = 0; p.cannonArmed = false; p.greaseGrabMs = -1;
-      p.noPickupUntilMs = 0;
+      p.noPickupUntilMs = 0; p.stunnedUntilMs = 0; p.vx = 0; p.vy = 0;
     }
     this.phase = PHASE.COUNTDOWN;
     this.countdownMs = ROUND.startCountdownMs;
@@ -770,6 +808,7 @@ export class Game {
         dir: p.dir, isMallen: p.isMallen, radius: Math.round(p.radius),
         score: p.score, eaten: p.eaten, carrying: p.carryingTubId != null,
         charging: p.charging, frenzy: p.frenzyMs > 0, ready: !!p.ready,
+        stunned: (this._clock || 0) < p.stunnedUntilMs,
         spriteIndex: p.spriteIndex,
         effect: p.effect,
         effectMs: p.effect ? Math.max(0, Math.round(p.effectUntilMs - (this._clock || 0))) : 0,
