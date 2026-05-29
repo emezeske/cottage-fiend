@@ -31,6 +31,8 @@ for (const d of DIRS)
     MANIFEST[`mallen_${d}_${f}`] = `mallen_${d}_${f}.png`;
     MANIFEST[`mallen_frenzy_${d}_${f}`] = `mallen_frenzy_${d}_${f}.png`;
   }
+// ferrari_{dir} — shown instead of the crew sprite while they have 2X SPEED
+for (const d of DIRS) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.png`;
 
 export const images = {};
 

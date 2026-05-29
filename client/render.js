@@ -475,6 +475,8 @@ function drawPlayer(ctx, p, frame, isSelf) {
   let img;
   if (p.isMallen) img = images[`mallen${p.frenzy ? '_frenzy' : ''}_${dir}_${f}`];
   else img = images[`delivery_${p.spriteIndex}_${dir}_${f}`];
+  // 2X SPEED: the delivery crew turn into a zooming Ferrari (directional car sprite)
+  const car = (p.effect === 'double_speed' && !p.isMallen) ? images[`ferrari_${dir}`] : null;
   // full-body sprites are drawn a bit taller than the collision circle and nudged
   // up so the feet sit near the player position
   const size = p.radius * 3.0;
@@ -483,7 +485,9 @@ function drawPlayer(ctx, p, frame, isSelf) {
   if (p.stunned && !golden) px += (Math.random() - 0.5) * 4; // jitter/shake
   if (p.dashing) addDashTrail(p.x, cy, size * 0.42);
 
-  if (p.stunned && !golden) {
+  if (car) {
+    drawSprite(ctx, car, px, p.y, size * 1.9, size * 1.9); // centered on the player
+  } else if (p.stunned && !golden) {
     // A Mallen chomp can stun ~everyone at once, so avoid shadowBlur here (it's a
     // brutal per-sprite mobile GPU cost when many are stunned) — use a cheap
     // hue-cycling ring + the existing flicker/jitter instead.
