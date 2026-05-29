@@ -163,6 +163,22 @@
       object-fit: contain;
     }
 
+    #adBadge {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 41;
+      background: #ffe14d;
+      color: #1e1814;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 2px solid #1e1814;
+      text-transform: uppercase;
+    }
+
     #adSkip {
       position: fixed;
       bottom: 24px;
@@ -204,7 +220,8 @@
   <button id="actionBtn">PUNCH</button>
 
   <div id="adInterstitial">
-    <img id="adImage" src="assets/interstitial_ad.png" alt="Advertisement" />
+    <span id="adBadge">▶ Advertisement</span>
+    <img id="adImage" src="assets/sprites/interstitial_ad.png" alt="Advertisement" />
     <button id="adSkip" disabled>Skip in 3</button>
   </div>
 

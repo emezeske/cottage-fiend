@@ -464,7 +464,24 @@ function drawPlayer(ctx, p, frame, isSelf) {
   ctx.fillStyle = isSelf ? '#ffe14d' : '#fff';
   ctx.fillText(tag, p.x, topY);
 
-  if (p.stunned) {
+  if (p.adStunned && images.interstitial_ad) {
+    // a tiny "forced to watch an ad" screen above the head, so others can see why
+    // this player is frozen
+    const img = images.interstitial_ad;
+    const aw = size * 0.5;
+    const ah = aw * (img.width && img.height ? img.height / img.width : 1.25);
+    const ax = p.x - aw / 2, ay = topY - 16 - ah;
+    ctx.fillStyle = '#1e1814';
+    ctx.fillRect(ax - 3, ay - 3, aw + 6, ah + 6);   // bezel
+    ctx.drawImage(img, ax, ay, aw, ah);
+    ctx.fillStyle = '#ffe14d';                       // little "AD" tab
+    ctx.fillRect(ax - 3, ay - 3, 18, 12);
+    ctx.fillStyle = '#1e1814';
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('AD', ax, ay + 6);
+    ctx.textAlign = 'center';
+  } else if (p.stunned) {
     ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.fillStyle = '#9fefff';
     ctx.strokeText('💫 STUNNED 💫', p.x, topY - 16);

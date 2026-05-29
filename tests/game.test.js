@@ -462,7 +462,10 @@ test('interstitial ad is a one-shot debuff that stuns the claimer for ~3s', () =
   const now = g._clock;
   g._applyOneShot(p, FX.INTERSTITIAL, now);
   assert.equal(p.stunnedUntilMs, now + EFFECT.interstitialMs);
+  assert.equal(p.adStunUntilMs, now + EFFECT.interstitialMs);
   assert.equal(p.charging, false);
+  // the snapshot exposes adStunned so other clients can draw the above-head ad
+  assert.equal(g.snapshot().players.find(x => x.id === id).adStunned, true);
 });
 
 test('double_speed is faster than half_speed (effects not swapped)', () => {

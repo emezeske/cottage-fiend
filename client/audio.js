@@ -34,6 +34,7 @@ const SFX_FILES = {
   banana: 'sfx_banana.mp3',
   swap: 'sfx_swap.mp3',
   pinata: 'sfx_pinata.mp3',
+  interstitial: 'sfx_interstitial.mp3', // local: forced ad-break debuff jingle
   invincible_theme: 'invincible.mp3', // looped locally while you're invincible
 };
 

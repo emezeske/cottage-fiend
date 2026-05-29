@@ -58,7 +58,7 @@ function showInterstitial() {
   if (adShowing) return;
   adShowing = true;
   adInterstitial.style.display = 'flex';
-  playSound(['ad1', 'ad2', 'ad3'][Math.random() * 3 | 0]); // the (very important) jingle
+  // the ad jingle plays via the standard per-effect cue (playSound('interstitial'))
   adSkipReady = false;
   adSkip.disabled = true;
   let remaining = 3;

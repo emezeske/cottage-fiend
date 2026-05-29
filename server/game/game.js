@@ -94,6 +94,7 @@ export class Game {
       greaseGrabMs: -1,           // clock time greased player grabbed (-1 = none)
       noPickupUntilMs: 0,         // auto-pickup suppressed until this clock time (after a forced drop)
       stunnedUntilMs: 0,          // frozen (can't act) until this clock time (Mallen devour shockwave)
+      adStunUntilMs: 0,           // frozen specifically by the interstitial-ad debuff (for the above-head icon)
       dashUntilMs: 0,             // Mallen lunge active until this clock time
       dashVx: 0, dashVy: 0,       // lunge velocity
     };
@@ -454,6 +455,7 @@ export class Game {
       // forced ad break: freeze the claimer (the client shows a skippable
       // full-screen ad) — they keep their tub but can't act, so they're a sitting duck.
       p.stunnedUntilMs = now + EFFECT.interstitialMs;
+      p.adStunUntilMs = now + EFFECT.interstitialMs; // drives the above-head ad icon for others
       p.vx = 0; p.vy = 0;
       p.charging = false;
     }
@@ -848,7 +850,7 @@ export class Game {
       p.radius = p.isMallen ? MALLEN.radius : PLAYER.radius;
       p.ready = false;
       p.effect = null; p.effectUntilMs = 0; p.cannonArmed = false; p.greaseGrabMs = -1;
-      p.noPickupUntilMs = 0; p.stunnedUntilMs = 0; p.vx = 0; p.vy = 0;
+      p.noPickupUntilMs = 0; p.stunnedUntilMs = 0; p.adStunUntilMs = 0; p.vx = 0; p.vy = 0;
       p.dashUntilMs = 0; p.dashVx = 0; p.dashVy = 0;
     }
     this.phase = PHASE.COUNTDOWN;
@@ -883,6 +885,7 @@ export class Game {
         score: p.score, eaten: p.eaten, carrying: p.carryingTubId != null,
         charging: p.charging, frenzy: p.frenzyMs > 0, ready: !!p.ready,
         stunned: (this._clock || 0) < p.stunnedUntilMs,
+        adStunned: (this._clock || 0) < p.adStunUntilMs,
         dashing: (this._clock || 0) < p.dashUntilMs,
         spriteIndex: p.spriteIndex,
         effect: p.effect,
