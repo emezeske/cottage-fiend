@@ -379,8 +379,17 @@ export class Game {
   }
 
   _spawnPresent(now) {
-    const landX = LOCI.edgePadding + this.rng() * (ARENA.width - 2 * LOCI.edgePadding);
-    const landY = LOCI.edgePadding + this.rng() * (ARENA.height - 2 * LOCI.edgePadding);
+    // keep presents off the truck/fridge — a present landing on a solid locus can
+    // never be reached (players get shoved out) and would sit there forever.
+    const clearT = LOCI.truckRadius + PRESENT.radius + PLAYER.radius;
+    const clearF = LOCI.fridgeRadius + PRESENT.radius + PLAYER.radius;
+    let landX, landY;
+    for (let i = 0; i < 24; i++) {
+      landX = LOCI.edgePadding + this.rng() * (ARENA.width - 2 * LOCI.edgePadding);
+      landY = LOCI.edgePadding + this.rng() * (ARENA.height - 2 * LOCI.edgePadding);
+      if (dist(landX, landY, this.loci.truck.x, this.loci.truck.y) >= clearT &&
+          dist(landX, landY, this.loci.fridge.x, this.loci.fridge.y) >= clearF) break;
+    }
     this.presents.push({
       id: this._presentSeq++,
       x: landX, y: PRESENT.fallStartY, // starts above arena, drifts to landY

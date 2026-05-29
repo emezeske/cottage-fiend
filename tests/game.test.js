@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, _resetIds } from '../server/game/game.js';
 import {
-  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL, BUFF_POOL,
+  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL, BUFF_POOL, PRESENT,
 } from '../server/game/constants.js';
 import { seededRng } from './helpers.js';
 
@@ -509,6 +509,20 @@ test('corgi attack spawns a hunter that stuns others but never its owner', () =>
   const ownerBefore = g.players.get(owner).stunnedUntilMs;
   advance(g, 200);
   assert.equal(g.players.get(owner).stunnedUntilMs, ownerBefore, 'owner never attacked');
+});
+
+test('presents never land on top of the truck or fridge', () => {
+  const g = newGame(3);
+  g.addPlayer('alice');
+  g.startRound();
+  for (let i = 0; i < 200; i++) g._spawnPresent(0);
+  const clearT = LOCI.truckRadius + PRESENT.radius + PLAYER.radius;
+  const clearF = LOCI.fridgeRadius + PRESENT.radius + PLAYER.radius;
+  const d = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+  for (const p of g.presents) {
+    assert.ok(d(p.landX, p.landY, g.loci.truck.x, g.loci.truck.y) >= clearT, 'clear of truck');
+    assert.ok(d(p.landX, p.landY, g.loci.fridge.x, g.loci.fridge.y) >= clearF, 'clear of fridge');
+  }
 });
 
 test('corgi expires after its lifespan', () => {

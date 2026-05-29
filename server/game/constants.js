@@ -187,8 +187,8 @@ export const FX = {
 // never attacks the same person twice or the player who spawned it.
 export const CORGI = {
   radius: 22,
-  speed: 360,            // px/sec while wandering
-  chargeSpeed: 450,      // px/sec while charging a victim
+  speed: 252,            // px/sec while wandering
+  chargeSpeed: 315,      // px/sec while charging a victim
   detectRadius: 340,     // start charging an eligible player within this range
   touchRadius: 40,       // corgi-center -> player-center distance that lands a hit
   stunMs: 2000,          // victim stun duration
