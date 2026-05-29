@@ -23,7 +23,8 @@ needed. Keep filenames exactly as listed.
 | `sfx_first_curd.mp3` | The **first score of the round** by anyone — a delivery player delivering OR the Mallen devouring his first tub. Fires **once per round** | **Global** (everyone, full volume) |
 | `sfx_round.mp3` | A **round starts** (the "ROUND N: CURD" intro, during the countdown) | **Global** |
 | `sfx_round_over.mp3` | A **round ends** (the leaderboard "round over" sting) | **Global** |
-| `sfx_score.mp3` | **You score** — a delivery player delivering a tub to the fridge, or the Mallen devouring a tub | **Local** — only the scorer |
+| `sfx_score.mp3` | **You score by walking a tub up to the fridge**, or the Mallen devouring a tub | **Local** — only the scorer |
+| `sfx_dunk.mp3` | **You score by THROWING a tub into the fridge** (replaces `sfx_score` for thrown deliveries) | **Local** — only the thrower |
 | `sfx_ad_1.mp3` / `_2` / `_3` | **You tap the top ad banner** — one of the three is picked at random | **Local** — only the tapper |
 | `sfx_dominating.mp3` | You pull **5+ points ahead** of the next-best crew member (fires once per lead) | **Local** — only the leader |
 

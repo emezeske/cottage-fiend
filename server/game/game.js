@@ -252,9 +252,11 @@ export class Game {
       if (p.effect === FX.CURD_CANNON) this._clearEffect(p);
     }
     // twin-stick: throw the aim direction if the client set one this charge,
-    // otherwise fall back to the facing dir (movement-driven).
-    const dx = p.aim ? p.aim.x : p.dir.x;
-    const dy = p.aim ? p.aim.y : p.dir.y;
+    // otherwise fall back to the facing dir (movement-driven). The BACKWARDS
+    // debuff also flips the throw — your tubs go opposite where you're pointed.
+    let dx = p.aim ? p.aim.x : p.dir.x;
+    let dy = p.aim ? p.aim.y : p.dir.y;
+    if (p.effect === FX.BACKWARDS) { dx = -dx; dy = -dy; }
     p.aim = null;
     t.state = 'flying';
     t.carrierId = null;
@@ -805,6 +807,7 @@ export class Game {
     }
     if (p.effect === FX.DOUBLE_SPEED) base *= EFFECT.doubleSpeedMult;
     else if (p.effect === FX.HALF_SPEED) base *= EFFECT.halfSpeedMult;
+    else if (p.effect === FX.BANANA) base *= EFFECT.bananaSpeedMult;   // slidey is fast AND uncontrollable
     return base;
   }
 
@@ -936,7 +939,7 @@ export class Game {
         u = u < 0 ? 0 : u > 1 ? 1 : u;
         const cx = ox + abx * u, cy = oy + aby * u;
         if (Math.hypot(f.x - cx, f.y - cy) < LOCI.scoreRadius) {
-          this._scoreDelivery(t);
+          this._scoreDelivery(t, true);                            // thrown delivery
           t._dead = true;
           continue;
         }
@@ -970,7 +973,7 @@ export class Game {
     if (scored) this.tubs = this.tubs.filter((t) => !t._dead);
   }
 
-  _scoreDelivery(tub) {
+  _scoreDelivery(tub, thrown) {
     // credit the last carrier if we tracked one; else nobody (still counts as gone)
     const scorer = tub.lastCarrierId != null ? this.players.get(tub.lastCarrierId) : null;
     if (scorer) {
@@ -978,6 +981,7 @@ export class Game {
       scorer.score += pts;
     }
     this.events.push({ type: 'score', x: this.loci.fridge.x, y: this.loci.fridge.y,
+                       thrown: !!thrown,                       // client picks SFX off this
                        name: scorer ? scorer.name : null, id: scorer ? scorer.id : null });
     this._maybeFirstCurd();
   }

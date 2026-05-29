@@ -157,7 +157,8 @@ export const EFFECT = {
   tinyMult: 0.6,            // size multiplier while 'tiny'
   doubleSpeedMult: 2.0,
   halfSpeedMult: 0.5,
-  bananaAccel: 0.7,         // 'slidey': how fast velocity eases toward input (lower = more slippery; also the coast-to-stop rate). low = chaotic ice
+  bananaAccel: 0.45,        // 'slidey': how fast velocity eases toward input (lower = more slippery; also the coast-to-stop rate). low = chaotic ice
+  bananaSpeedMult: 1.4,     // 'slidey' also boosts top speed so you get more chaos out of less control
   interstitialMs: 3000,     // forced ad-break debuff: you're stunned this long while the skip timer counts down
   goldenCurdMs: 3000,       // golden-curd buff: brief freeze while the celebration plays (also the client anim length)
 };

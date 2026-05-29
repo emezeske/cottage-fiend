@@ -338,7 +338,9 @@ function connect(name) {
         if (e.type === 'firstCurd') playSound('firstCurd');
         if (e.type === 'roundStart') playSound('round');
         // local SFX (only the affected player hears)
-        if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId && !firstCurd && !dominatingMe) playSound('score');
+        if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId && !firstCurd && !dominatingMe) {
+          playSound(e.type === 'score' && e.thrown ? 'dunk' : 'score');
+        }
         if (e.type === 'dominating' && e.id === selfId) playSound('dominating'); // you're 5+ ahead
         // golden curd: a global celebration — everyone sees the animation and hears it
         if (e.type === 'presentClaim' && e.fx === 'golden_curd') { playSound('golden_curd'); addGoldenCurd(e.id); }
@@ -595,7 +597,9 @@ function loop(ts = 0) {
   const p = me();
   if (charge.active && p) {
     charge.x = p.x; charge.y = p.y;
-    charge.dir = charge.aim || p.dir;          // twin-stick: local aim overrides facing dir
+    let d = charge.aim || p.dir;               // twin-stick: local aim overrides facing dir
+    if (p.effect === 'backwards') d = { x: -d.x, y: -d.y };  // backwards flips the throw too
+    charge.dir = d;
     charge.power = chargePower(performance.now() - chargeStartTs);
   }
   render(ctx, canvas, state, selfId, charge);

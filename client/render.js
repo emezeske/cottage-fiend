@@ -521,9 +521,11 @@ function drawDanceLights(ctx, x, cy, size, t) {
 }
 
 function drawPlayer(ctx, p, frame, isSelf) {
-  // twin-stick: while charging a throw, the sprite + foot-arrow follow the aim
-  // vector (where the tub is about to go), not where the player is running.
-  const faceDir = (p.charging && p.aim) ? p.aim : p.dir;
+  // twin-stick: while charging a throw, the sprite + foot-arrow follow the
+  // throw vector (where the tub is about to go), not where the player is
+  // running. BACKWARDS flips the throw, so the sprite faces backward too.
+  let faceDir = (p.charging && p.aim) ? p.aim : p.dir;
+  if (p.charging && p.effect === 'backwards') faceDir = { x: -faceDir.x, y: -faceDir.y };
   const dir = dir8(faceDir.x, faceDir.y);
   const tnow = performance.now();
   // golden-curd celebration freezes the player too, but it's a buff — show the
@@ -1025,11 +1027,20 @@ function drawLeaderboard(ctx, W, H, state, selfId) {
 }
 
 let _blindBlobs = null;
+let _blindBlobsW = 0, _blindBlobsH = 0;
 function drawBlindness(ctx, W, H) {
-  if (!_blindBlobs) {
+  // regenerate when the canvas size changes (e.g., orientation) so blob count
+  // and size keep up with the screen — tablets were left mostly see-through.
+  if (!_blindBlobs || _blindBlobsW !== W || _blindBlobsH !== H) {
+    const sizeScale = Math.min(W, H) / 400;          // phones ~1.0, tablets ~2-3
+    const count = Math.round(40 * sizeScale);
     _blindBlobs = [];
-    for (let i = 0; i < 40; i++)
-      _blindBlobs.push({ x: Math.random() * W, y: Math.random() * H, r: 30 + Math.random() * 70 });
+    for (let i = 0; i < count; i++)
+      _blindBlobs.push({
+        x: Math.random() * W, y: Math.random() * H,
+        r: (30 + Math.random() * 70) * sizeScale,
+      });
+    _blindBlobsW = W; _blindBlobsH = H;
   }
   ctx.save();
   ctx.fillStyle = 'rgba(245,244,230,0.82)';
