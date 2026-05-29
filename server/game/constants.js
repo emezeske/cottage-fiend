@@ -187,7 +187,7 @@ export const FX = {
 // Dance-party buff: everyone within radius of the initiator is stunned into dancing
 // for the duration (the initiator is unaffected). They + the initiator hear the music.
 export const DANCE = {
-  radius: 260,
+  radius: 420,           // generous — catches everyone roughly on-screen near the initiator
   durationMs: 6000,
 };
 

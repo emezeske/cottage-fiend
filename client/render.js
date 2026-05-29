@@ -535,13 +535,13 @@ function drawPlayer(ctx, p, frame, isSelf) {
   if (p.stunned && !golden && !dancing) px += (Math.random() - 0.5) * 4; // jitter/shake
   if (p.dashing) addDashTrail(p.x, cy, size * 0.42);
 
-  if (car) {
-    drawSprite(ctx, car, px, p.y, size * 1.9, size * 1.9); // centered on the player
-  } else if (dancing) {
+  if (dancing) {
     drawDanceLights(ctx, px, cy, size, tnow);
     const bob = Math.abs(Math.sin(tnow / 130)) * size * 0.16;  // bounce up to the beat
     const sway = Math.sin(tnow / 190) * size * 0.11;           // sway side to side
     drawSprite(ctx, img, px + sway, cy - bob, size, size);
+  } else if (car) {
+    drawSprite(ctx, car, px, p.y, size * 1.9, size * 1.9); // centered on the player
   } else if (p.stunned && !golden) {
     // A Mallen chomp can stun ~everyone at once, so avoid shadowBlur here (it's a
     // brutal per-sprite mobile GPU cost when many are stunned) — use a cheap
