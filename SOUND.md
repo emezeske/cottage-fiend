@@ -8,9 +8,8 @@ needed. Keep filenames exactly as listed.
   tell me and I'll change the mapping in `client/audio.js`).
 - **Length:** the SFX are short one-shots (most ≈ 0.3–1.5s, play once). The
   invincibility theme and the music tracks **loop**, so they can be longer.
-- **All SFX are real audio** except `sfx_interstitial.mp3` (the forced ad-break
-  debuff), which is a placeholder copy pending a real recording — overwrite it with
-  the same name (`.mp3` or, if you give me a `.wav`, I'll convert it).
+- **All SFX are real audio.** To replace any clip, overwrite its file in
+  `client/assets/sounds/` with the same name.
 - All audio is **preloaded** before the JOIN button enables (so the first round is
   smooth).
 
@@ -66,7 +65,7 @@ debuffs, and never curd cannon since he can't throw).
 | `sfx_tiny.mp3` | you shrink |
 | `sfx_blindness.mp3` | screen splattered with cottage cheese |
 | `sfx_banana.mp3` | slidey/ice-physics movement |
-| `sfx_interstitial.mp3` | forced full-screen ad; you're stunned ~3s *(placeholder — record this one)* |
+| `sfx_interstitial.mp3` | forced full-screen ad; you're stunned ~3s |
 
 **Wildcards (chaotic, anyone):**
 
