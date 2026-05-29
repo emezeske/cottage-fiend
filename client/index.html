@@ -266,7 +266,10 @@
       First to <b>10</b> wins. Grab <b>presents</b> for power-ups (or curses!).</p>
     <p class="mallen-note">Name yourself <b>mallen</b> to become THE MALLEN — the
       cottage-cheese fiend who pummels the crew and devours dropped tubs.</p>
-    <input id="name" placeholder="your name" maxlength="16" autocomplete="off" />
+    <input id="name" type="text" name="nickname" placeholder="your name" maxlength="16"
+      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
+      inputmode="text" data-lpignore="true" data-1p-ignore data-form-type="other"
+      readonly onfocus="this.removeAttribute('readonly')" />
     <button id="joinBtn">JOIN THE CURD CHAOS</button>
     <p class="hint">Drag to move · PUNCH to knock tubs loose · <span id="status"></span></p>
   </div>
