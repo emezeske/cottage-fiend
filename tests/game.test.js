@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, _resetIds } from '../server/game/game.js';
 import {
-  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER,
+  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX,
 } from '../server/game/constants.js';
 import { seededRng } from './helpers.js';
 
@@ -401,4 +401,46 @@ test('drainEvents empties the event queue', () => {
   assert.ok(e1.length >= 1);
   const e2 = g.drainEvents();
   assert.equal(e2.length, 0);
+});
+
+// Regression: claiming present after present in a single round must roll a
+// VARIETY of effects (not the same one repeatedly) — guards the randomization.
+test('presents roll varied effects within a round', () => {
+  const g = newGame(42);
+  const a = g.addPlayer('alice');
+  g.addPlayer('bob'); // a second player so the SWAP wildcard has a target
+  g.startRound();
+  advance(g, 3200); // run out the countdown so the round is PLAYING
+  const fxs = [];
+  for (let i = 0; i < 15; i++) {
+    const pa = g.players.get(a);
+    // drop a landed present right on alice and tick so she claims it
+    g.presents.push({ id: 9000 + i, x: pa.x, y: pa.y, landX: pa.x, landY: pa.y, fallMs: 9e9, landed: true });
+    g.tick(33);
+    for (const e of g.drainEvents()) if (e.type === 'presentClaim' && e.id === a) fxs.push(e.fx);
+  }
+  assert.equal(fxs.length, 15, 'every forced present should be claimed');
+  assert.ok(new Set(fxs).size >= 4, `expected varied rolls, got: ${fxs.join(', ')}`);
+});
+
+// Regression: double_speed must speed you up and half_speed slow you down — i.e.
+// the two effects (and the sounds keyed off their ids) are not swapped.
+test('double_speed is faster than half_speed (effects not swapped)', () => {
+  const g = newGame();
+  const id = g.addPlayer('runner');
+  g.startRound();
+  advance(g, 3200);
+  const step = (effect) => {
+    const p = g.players.get(id);
+    p.effect = effect;
+    p.effectUntilMs = g._clock + 1e6; // don't let it expire mid-measurement
+    p.x = 800; p.y = 800;
+    g.setInput(id, 1, 0); // hold "move right"
+    const x0 = p.x;
+    g.tick(100);
+    return g.players.get(id).x - x0;
+  };
+  const fast = step(FX.DOUBLE_SPEED);
+  const slow = step(FX.HALF_SPEED);
+  assert.ok(fast > slow, `double_speed (${fast}px) should exceed half_speed (${slow}px)`);
 });
