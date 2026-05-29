@@ -129,64 +129,73 @@ function sendAim(x, y) {
   send(MSG.AIM, { x, y });
 }
 
-// Track the visual viewport, not just the layout viewport. On iPad Safari /
-// Chrome a pinch zoom (or any stuck zoom state) sets visualViewport.offsetTop /
-// offsetLeft to non-zero values and shrinks visualViewport.width / .height. CSS
-// `position: fixed; inset: 0` and `bottom: 28px` both anchor to the LAYOUT
-// viewport, which leaves overlays clipped and buttons floating above the
-// visible bottom. Re-positioning every fixed full-screen element against the
-// visual viewport via JS pins everything to what's actually visible.
+// Two regimes:
+//   - Normal (no zoom): CSS handles layout (100dvh / inset:0 / bottom:28px).
+//     fitCanvas only updates the canvas backing store. innerHeight under-reports
+//     on some iPad Safari builds, so use the max of every viewport signal we
+//     have. This is what makes the play area actually fill the window.
+//   - Pinch-zoom active: CSS anchors to the (now too-large) layout viewport,
+//     so fitCanvas takes over and pins canvas + overlays + buttons to
+//     visualViewport's offset/size so they track the visible region.
 const LAYOUT_MARGIN = 28;
+const OVERLAY_IDS = ['overlay', 'audioUnlockModal', 'adInterstitial'];
+function clearJsPos(el) {
+  el.style.left = ''; el.style.top = '';
+  el.style.right = ''; el.style.bottom = '';
+  el.style.width = ''; el.style.height = '';
+}
 function fitCanvas() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const vv = window.visualViewport;
-  const w = vv ? vv.width       : window.innerWidth;
-  const h = vv ? vv.height      : window.innerHeight;
-  const ox = vv ? vv.offsetLeft : 0;
-  const oy = vv ? vv.offsetTop  : 0;
+  const zoomed = !!(vv && (vv.scale > 1.02 || vv.offsetTop > 0.5 || vv.offsetLeft > 0.5));
 
-  canvas.width = Math.round(w * dpr);
+  if (!zoomed) {
+    // Let CSS run the layout. Strip any inline overrides from a previous zoom.
+    clearJsPos(canvas);
+    for (const id of OVERLAY_IDS) { const el = document.getElementById(id); if (el) clearJsPos(el); }
+    clearJsPos(joystick); clearJsPos(actionBtn); clearJsPos(goBtn);
+    // Canvas backing store from the largest viewport signal we have — Safari
+    // iPad sometimes under-reports one of these and leaves a strip uncovered.
+    const w = Math.max(window.innerWidth,  document.documentElement.clientWidth,  vv ? vv.width  : 0);
+    const h = Math.max(window.innerHeight, document.documentElement.clientHeight, vv ? vv.height : 0);
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width  = w + 'px';     // pin so computeCamera's dpr math works
+    canvas.style.height = h + 'px';
+    return;
+  }
+
+  // Zoomed: pin everything to the visible viewport instead of the layout one.
+  const w = vv.width, h = vv.height, ox = vv.offsetLeft, oy = vv.offsetTop;
+  canvas.width  = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
   canvas.style.left = ox + 'px';
   canvas.style.top  = oy + 'px';
   canvas.style.width  = w + 'px';
   canvas.style.height = h + 'px';
 
-  // Full-screen overlays — pin to the visible viewport so the ad badge and
-  // title screen don't get clipped off the top during a stuck zoom.
-  for (const id of ['overlay', 'audioUnlockModal', 'adInterstitial']) {
+  for (const id of OVERLAY_IDS) {
     const el = document.getElementById(id);
     if (!el) continue;
-    el.style.left = ox + 'px';
-    el.style.top  = oy + 'px';
-    el.style.width  = w + 'px';
-    el.style.height = h + 'px';
-    el.style.right = 'auto';
-    el.style.bottom = 'auto';
+    el.style.left = ox + 'px';  el.style.top    = oy + 'px';
+    el.style.width = w + 'px';  el.style.height = h  + 'px';
+    el.style.right = 'auto';    el.style.bottom = 'auto';
   }
-
-  // joystick (bottom-left) + action button (bottom-right), anchored to the
-  // *visible* viewport's corners rather than the layout viewport's
   const jh = joystick.offsetHeight || 110;
   joystick.style.left = (ox + LAYOUT_MARGIN) + 'px';
   joystick.style.top  = (oy + h - jh - LAYOUT_MARGIN) + 'px';
-  joystick.style.right = 'auto';
-  joystick.style.bottom = 'auto';
+  joystick.style.right = 'auto'; joystick.style.bottom = 'auto';
 
   const aw = actionBtn.offsetWidth  || 116;
   const ah = actionBtn.offsetHeight || 116;
   actionBtn.style.left = (ox + w - aw - LAYOUT_MARGIN) + 'px';
   actionBtn.style.top  = (oy + h - ah - LAYOUT_MARGIN) + 'px';
-  actionBtn.style.right = 'auto';
-  actionBtn.style.bottom = 'auto';
+  actionBtn.style.right = 'auto'; actionBtn.style.bottom = 'auto';
 
-  // LET'S GO button (bottom-center): existing translateX(-50%) does the
-  // centering, we just supply the absolute pixel left/top of its anchor point.
   const gh = goBtn.offsetHeight || 60;
   goBtn.style.left = (ox + w / 2) + 'px';
   goBtn.style.top  = (oy + h - gh - 24) + 'px';
-  goBtn.style.right = 'auto';
-  goBtn.style.bottom = 'auto';
+  goBtn.style.right = 'auto'; goBtn.style.bottom = 'auto';
 }
 window.addEventListener('resize', fitCanvas);
 window.addEventListener('orientationchange', fitCanvas);
