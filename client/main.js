@@ -3,12 +3,10 @@
 import { loadAssets } from './assets.js';
 import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
 import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addCurdBurst, AD_H } from './render.js';
-import { setupInput } from './input.js';
-import { screenToWorld } from './camera.js';
 
 const MSG = {
   JOIN: 'join', INPUT: 'input', PICKUP: 'pickup', CHARGE: 'charge',
-  RELEASE: 'release', PUNCH: 'punch', READY: 'ready', WELCOME: 'welcome', STATE: 'state',
+  RELEASE: 'release', AIM: 'aim', PUNCH: 'punch', READY: 'ready', WELCOME: 'welcome', STATE: 'state',
 };
 // throw tuning mirrored from server constants for the visual arc only
 const THROW = { minPower: 40, maxPower: 1600, oscillationHz: 1.0 };
@@ -20,6 +18,8 @@ const nameInput = document.getElementById('name');
 const joinBtn = document.getElementById('joinBtn');
 const goBtn = document.getElementById('goBtn');
 const actionBtn = document.getElementById('actionBtn');
+const joystick = document.getElementById('joystick');
+const joystickKnob = document.getElementById('joystickKnob');
 const audioUnlockModal = document.getElementById('audioUnlockModal');
 const audioUnlockPlayer = document.getElementById('audioUnlockPlayer');
 const adInterstitial = document.getElementById('adInterstitial');
@@ -112,8 +112,22 @@ function fakeSnapshot(preview) {
   };
 }
 let chargeStartTs = 0;
-const charge = { active: false, x: 0, y: 0, dir: { x: 1, y: 0 },
+const charge = { active: false, x: 0, y: 0, dir: { x: 1, y: 0 }, aim: null,
                  power: THROW.minPower, minPower: THROW.minPower, maxPower: THROW.maxPower };
+// twin-stick aim: while charging, drag the thumb past a small deadzone in any
+// direction to set the throw direction independent of where you're running.
+const AIM_DEADZONE = 14;             // px from touchdown before aim kicks in
+let aimOrigin = null;                // { x, y } client px at touchdown
+let aimPid = null;
+let lastAimSent = { x: null, y: null, ts: 0 };
+function sendAim(x, y) {
+  const now = performance.now();
+  const changed = lastAimSent.x == null ||
+    Math.abs(x - lastAimSent.x) > 0.03 || Math.abs(y - lastAimSent.y) > 0.03;
+  if (!changed && now - lastAimSent.ts < 100) return;
+  lastAimSent = { x, y, ts: now };
+  send(MSG.AIM, { x, y });
+}
 
 // Fill the whole screen; render at devicePixelRatio (capped) for crisp pixels.
 function fitCanvas() {
@@ -233,10 +247,9 @@ function chargePower(elapsedMs) {
 
 function me() { return state && state.players.find(p => p.id === selfId); }
 
-// Movement: the character walks toward wherever your finger currently is. We
-// store the finger's screen position while dragging and re-steer every frame
-// (so a held finger keeps the character moving, and the camera pans to follow).
-let dragPos = null;                 // {x,y} in CSS px, or null when not dragging
+// Movement: an analog virtual joystick (bottom-left). The knob's offset from
+// center is sent as a {-1..1, -1..1} vector — direction is heading, magnitude
+// scales speed. Pickup is automatic on contact; throwing is the action button.
 let lastVec = { x: 0, y: 0 };
 let lastSendTs = 0;
 
@@ -249,31 +262,53 @@ function sendInput(x, y) {
 }
 
 function stopMoving() {
-  dragPos = null;
   lastVec = { x: 0, y: 0 }; lastSendTs = performance.now();
   send(MSG.INPUT, { x: 0, y: 0 });   // the server coasts to a stop if 'slidey' is active
 }
 
-function steer() {
-  const p = me();
-  if (!p || !dragPos) return;
-  if (adShowing) return;   // forced to watch the ad
-  if (p.stunned) return;   // frozen — can't move
-  const target = screenToWorld(dragPos.x, dragPos.y);
-  let vx = target.x - p.x, vy = target.y - p.y;
-  const len = Math.hypot(vx, vy);
-  if (len < 12) { sendInput(0, 0); return; } // finger on the character => hold still
-  vx /= len; vy /= len;
-  if (p.effect === 'backwards') { vx = -vx; vy = -vy; }
-  sendInput(vx, vy);
+// Joystick: thumb-drag the knob to steer (distance from center scales speed).
+const JOY_R = 36;                    // max thumb travel (px) from base center
+let joyPid = null;
+function joyVecFromEvent(e) {
+  const r = joystick.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  let dx = e.clientX - cx, dy = e.clientY - cy;
+  const len = Math.hypot(dx, dy);
+  if (len > JOY_R) { dx = dx / len * JOY_R; dy = dy / len * JOY_R; }
+  return { dx, dy };
 }
-
-// input wiring: canvas drag steers; pickup is automatic; throwing is the button.
-setupInput(canvas, {
-  onMove: (x, y) => { dragPos = { x, y }; },
-  onStop: () => stopMoving(),
-  onTap: () => send(MSG.PICKUP), // harmless backup; pickup is automatic on contact
-});
+function setKnob(dx, dy) { joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`; }
+function sendJoy(dx, dy) {
+  const p = me();
+  let x = dx / JOY_R, y = dy / JOY_R;          // -1..1 with magnitude 0..1 = analog speed
+  if (p && p.effect === 'backwards') { x = -x; y = -y; }
+  sendInput(x, y);
+}
+function joyDown(e) {
+  if (joyPid != null) return;
+  e.preventDefault();
+  joyPid = e.pointerId;
+  try { joystick.setPointerCapture(e.pointerId); } catch {}
+  joystick.classList.add('active');
+  const v = joyVecFromEvent(e); setKnob(v.dx, v.dy); sendJoy(v.dx, v.dy);
+}
+function joyMove(e) {
+  if (joyPid == null || e.pointerId !== joyPid) return;
+  e.preventDefault();
+  const v = joyVecFromEvent(e); setKnob(v.dx, v.dy); sendJoy(v.dx, v.dy);
+}
+function joyUp(e) {
+  if (joyPid == null || (e.pointerId != null && e.pointerId !== joyPid)) return;
+  e.preventDefault();
+  joyPid = null;
+  joystick.classList.remove('active');
+  setKnob(0, 0);
+  stopMoving();
+}
+joystick.addEventListener('pointerdown', joyDown);
+joystick.addEventListener('pointermove', joyMove);
+joystick.addEventListener('pointerup', joyUp);
+joystick.addEventListener('pointercancel', joyUp);
 
 // Action button: PUNCH when empty-handed (or Mallen), HOLD-TO-THROW when carrying.
 function startThrow(e) {
@@ -283,12 +318,17 @@ function startThrow(e) {
   stopMoving();                // don't keep walking while you aim/throw
   charge.active = true;
   chargeStartTs = performance.now();
+  charge.aim = null;
+  aimOrigin = e ? { x: e.clientX, y: e.clientY } : null;
+  aimPid = e ? e.pointerId : null;
+  lastAimSent = { x: null, y: null, ts: 0 };
   send(MSG.CHARGE);
 }
 function endThrow() {
   if (!charge.active) return;
   charge.active = false;
-  send(MSG.RELEASE);
+  send(MSG.RELEASE);            // server uses the last-known aim (streamed via MSG.AIM)
+  charge.aim = null; aimOrigin = null; aimPid = null;
 }
 function onActionDown(e) {
   if (e) e.preventDefault();
@@ -297,14 +337,28 @@ function onActionDown(e) {
   if (p.carrying) startThrow(e);   // hold to charge a throw
   else send(MSG.PUNCH);            // empty-handed (or Mallen): punch
 }
+function onActionMove(e) {
+  if (!charge.active || aimOrigin == null) return;
+  if (e.pointerId != null && aimPid != null && e.pointerId !== aimPid) return;
+  e.preventDefault();
+  const dx = e.clientX - aimOrigin.x, dy = e.clientY - aimOrigin.y;
+  const len = Math.hypot(dx, dy);
+  if (len < AIM_DEADZONE) {
+    if (charge.aim) { charge.aim = null; sendAim(0, 0); }
+    return;
+  }
+  charge.aim = { x: dx / len, y: dy / len };
+  sendAim(charge.aim.x, charge.aim.y);
+}
 function onActionUp(e) {
   if (e) e.preventDefault();
   if (charge.active) endThrow();
 }
 actionBtn.addEventListener('pointerdown', onActionDown);
+actionBtn.addEventListener('pointermove', onActionMove);
 actionBtn.addEventListener('pointerup', onActionUp);
 actionBtn.addEventListener('pointercancel', onActionUp);
-actionBtn.addEventListener('pointerleave', onActionUp);
+// (no pointerleave: aiming intentionally drifts off the button visual)
 
 // tapping (not dragging through) the top ad banner plays its (very important) jingle
 let adTapStart = null;
@@ -364,6 +418,7 @@ function updateButtons() {
   const p = me();
   if (state.phase === 'playing' && p) {
     actionBtn.style.display = 'block';
+    joystick.style.display = 'block';
     const mode = p.carrying ? 'throw' : (p.isMallen ? 'attack' : 'punch');
     if (mode !== lastActionMode) {
       lastActionMode = mode;
@@ -373,6 +428,7 @@ function updateButtons() {
     }
   } else {
     actionBtn.style.display = 'none';
+    joystick.style.display = 'none';
     lastActionMode = null;
   }
 }
@@ -408,10 +464,9 @@ function loop(ts = 0) {
   lastFrameTs = ts;
   const p = me();
   if (charge.active && p) {
-    charge.x = p.x; charge.y = p.y; charge.dir = p.dir;
+    charge.x = p.x; charge.y = p.y;
+    charge.dir = charge.aim || p.dir;          // twin-stick: local aim overrides facing dir
     charge.power = chargePower(performance.now() - chargeStartTs);
-  } else if (dragPos && p) {
-    steer();
   }
   render(ctx, canvas, state, selfId, charge);
   paintActionButton();

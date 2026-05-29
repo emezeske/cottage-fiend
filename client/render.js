@@ -520,7 +520,10 @@ function drawDanceLights(ctx, x, cy, size, t) {
 }
 
 function drawPlayer(ctx, p, frame, isSelf) {
-  const dir = dir8(p.dir.x, p.dir.y);
+  // twin-stick: while charging a throw, the sprite + foot-arrow follow the aim
+  // vector (where the tub is about to go), not where the player is running.
+  const faceDir = (p.charging && p.aim) ? p.aim : p.dir;
+  const dir = dir8(faceDir.x, faceDir.y);
   const tnow = performance.now();
   // golden-curd celebration freezes the player too, but it's a buff — show the
   // golden animation (drawGoldenCurds) instead of the debuff stun visuals.
@@ -578,7 +581,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
     const col = p.isMallen ? '#ff4d6a' : PLAYER_COLORS[p.spriteIndex % PLAYER_COLORS.length];
     ctx.save();
     ctx.translate(p.x, p.y + p.radius);
-    ctx.rotate(Math.atan2(p.dir.y, p.dir.x));
+    ctx.rotate(Math.atan2(faceDir.y, faceDir.x));
     ctx.fillStyle = col; ctx.strokeStyle = '#1e1814'; ctx.lineWidth = 2;
     ctx.beginPath();
     // a dart with a notched (concave) back so only the long tip reads as "forward"

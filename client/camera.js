@@ -41,8 +41,3 @@ export function computeCamera(canvas, state, selfId) {
 }
 
 export function getCamera() { return _cam; }
-
-// CSS-pixel screen coords -> world coords (inverse of the camera transform).
-export function screenToWorld(cssX, cssY) {
-  return { x: (cssX - _cam.offX) / _cam.scale, y: (cssY - _cam.offY) / _cam.scale };
-}

@@ -552,6 +552,49 @@ test('dance party: a moving aura forces anyone in radius to dance and drop their
   assert.ok(g.players.get(far).danceUntilMs > g._clock, 'far joins once inside the radius');
 });
 
+test('twin-stick aim: a charging player throws in the streamed aim direction, not their facing dir', () => {
+  const g = newGame();
+  const id = g.addPlayer('thrower');
+  g.startRound();
+  advance(g, 3200);
+  const p = g.players.get(id);
+  giveTub(g, id);
+  // facing east (movement direction), but aim straight south
+  p.dir = { x: 1, y: 0 };
+  g.startCharge(id, g._clock);
+  g.setAim(id, 0, 10);                            // not a unit vector — server normalizes
+  assert.deepEqual(p.aim, { x: 0, y: 1 }, 'aim stored as a unit vector');
+  advance(g, 200);                                // charge a bit
+  g.release(id, g._clock);
+  const t = g.tubs.find(t => t.state === 'flying');
+  assert.ok(t, 'tub is flying');
+  assert.ok(Math.abs(t.vx) < 1e-6 && t.vy > 0, `expected south throw, got (${t.vx}, ${t.vy})`);
+  assert.equal(p.aim, null, 'aim cleared after release');
+});
+
+test('twin-stick aim: setAim is ignored outside of an active charge', () => {
+  const g = newGame();
+  const id = g.addPlayer('thrower');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  g.setAim(id, 1, 0);                              // not charging
+  assert.equal(p.aim, null, 'stale aim cannot be set without a charge');
+});
+
+test('twin-stick aim: a stun mid-charge cancels the aim too', () => {
+  const g = newGame();
+  const id = g.addPlayer('thrower');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  giveTub(g, id);
+  g.startCharge(id, g._clock);
+  g.setAim(id, 1, 0);
+  assert.ok(p.aim, 'aim is set');
+  g._stunPlayer(p, g._clock, 500);                 // any stun also clears the charge
+  assert.equal(p.charging, false);
+  assert.equal(p.aim, null, 'cancelled charge cancels the aim');
+});
+
 test('magnet rips a carried tub out of a nearby player and pulls it toward the holder', () => {
   const g = newGame();
   const holder = g.addPlayer('holder');

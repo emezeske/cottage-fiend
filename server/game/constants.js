@@ -125,6 +125,7 @@ export const MSG = {
   INPUT: 'input',           // movement vector
   PICKUP: 'pickup',         // tap to grab nearest tub
   CHARGE: 'charge',         // begin charging a throw
+  AIM: 'aim',               // twin-stick aim vector during a charge (else throw uses facing dir)
   RELEASE: 'release',       // release throw at current oscillator value
   PUNCH: 'punch',           // punch button: knock a tub loose / Mallen attack
   READY: 'ready',           // LET'S GO button

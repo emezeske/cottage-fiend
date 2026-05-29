@@ -145,6 +145,9 @@ wss.on('connection', (ws) => {
         case MSG.CHARGE:
           if (playerId) game.startCharge(playerId, now);
           break;
+        case MSG.AIM:
+          if (playerId) game.setAim(playerId, m.x || 0, m.y || 0);
+          break;
         case MSG.RELEASE:
           if (playerId) game.release(playerId, now);
           break;

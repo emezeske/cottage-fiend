@@ -116,6 +116,7 @@ export class Game {
       carryingTubId: null,
       charging: false,
       chargeStartMs: 0,
+      aim: null,                  // twin-stick: thrown direction during a charge (else uses .dir)
       hitsTaken: 0,               // toward dropping a tub
       // mallen-only:
       eaten: 0,
@@ -160,9 +161,12 @@ export class Game {
   setInput(id, x, y) {
     const p = this.players.get(id);
     if (!p) return;
-    const n = normalize(x, y);
-    p.moveInput = n;
-    if (n.x !== 0 || n.y !== 0) p.dir = n;
+    // Preserve magnitude (clamp to <=1) so an analog stick can scale speed.
+    // Unit-vector clients (legacy tap-and-drag) keep behaving as before.
+    let m = Math.hypot(x, y);
+    if (m > 1) { x /= m; y /= m; m = 1; }
+    p.moveInput = { x, y };
+    if (m > 0) p.dir = { x: x / m, y: y / m };
   }
 
   pickup(id, nowMs) {
@@ -216,6 +220,18 @@ export class Game {
     if (nowMs < p.stunnedUntilMs) return;
     p.charging = true;
     p.chargeStartMs = nowMs;
+    p.aim = null;                              // start each charge with no aim override
+  }
+
+  // Twin-stick aim: clients stream the throw direction independently of movement
+  // while charging. Stored as a unit vector; the throw uses it on release. The
+  // server ignores aim outside a charge window so stale messages can't replay it.
+  setAim(id, x, y) {
+    const p = this.players.get(id);
+    if (!p || !p.charging) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const m = Math.hypot(x, y);
+    p.aim = m < 0.01 ? null : { x: x / m, y: y / m };
   }
 
   release(id, nowMs) {
@@ -227,7 +243,7 @@ export class Game {
     const t = this.tubs.find(t => t.id === p.carryingTubId);
     p.charging = false;
     p.carryingTubId = null;
-    if (!t) return;
+    if (!t) { p.aim = null; return; }
     // curd cannon: this throw flies ~10x as far, then disarms
     const cannon = !!p.cannonArmed;
     if (cannon) {
@@ -235,10 +251,15 @@ export class Game {
       p.cannonArmed = false;
       if (p.effect === FX.CURD_CANNON) this._clearEffect(p);
     }
+    // twin-stick: throw the aim direction if the client set one this charge,
+    // otherwise fall back to the facing dir (movement-driven).
+    const dx = p.aim ? p.aim.x : p.dir.x;
+    const dy = p.aim ? p.aim.y : p.dir.y;
+    p.aim = null;
     t.state = 'flying';
     t.carrierId = null;
-    t.vx = p.dir.x * power;
-    t.vy = p.dir.y * power;
+    t.vx = dx * power;
+    t.vy = dy * power;
     t.thrownBy = id;                 // the thrower can't instantly re-catch their own throw
     t.thrownGraceUntil = nowMs + 400;
     t.cannon = cannon;
@@ -594,6 +615,7 @@ export class Game {
     p.stunnedUntilMs = now + durMs;
     p.vx = 0; p.vy = 0;
     p.charging = false;
+    p.aim = null;                              // a cancelled charge can't aim anything
     if (p.carryingTubId != null) {
       const t = this.tubs.find((t) => t.id === p.carryingTubId);
       if (t) { t.state = 'loose'; t.carrierId = null; }
@@ -1092,7 +1114,8 @@ export class Game {
         id: p.id, name: p.name, x: Math.round(p.x), y: Math.round(p.y),
         dir: p.dir, isMallen: p.isMallen, radius: Math.round(p.radius),
         score: p.score, eaten: p.eaten, carrying: p.carryingTubId != null,
-        charging: p.charging, frenzy: p.frenzyMs > 0, ready: !!p.ready,
+        charging: p.charging, aim: p.charging ? p.aim : null,
+        frenzy: p.frenzyMs > 0, ready: !!p.ready,
         stunned: (this._clock || 0) < p.stunnedUntilMs,
         adStunned: (this._clock || 0) < p.adStunUntilMs,
         dancing: (this._clock || 0) < p.danceUntilMs, // stunned dancers (bob/sway)
