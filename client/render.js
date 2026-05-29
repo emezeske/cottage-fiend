@@ -475,8 +475,9 @@ function drawPlayer(ctx, p, frame, isSelf) {
   let img;
   if (p.isMallen) img = images[`mallen${p.frenzy ? '_frenzy' : ''}_${dir}_${f}`];
   else img = images[`delivery_${p.spriteIndex}_${dir}_${f}`];
-  // 2X SPEED: the delivery crew turn into a zooming Ferrari (directional car sprite)
-  const car = (p.effect === 'double_speed' && !p.isMallen) ? images[`ferrari_${dir}`] : null;
+  // 2X SPEED turns you into a zooming Ferrari (directional car sprite). The Mallen
+  // becomes a car too — but reverts to his normal monster self while in a frenzy.
+  const car = (p.effect === 'double_speed' && !(p.isMallen && p.frenzy)) ? images[`ferrari_${dir}`] : null;
   // full-body sprites are drawn a bit taller than the collision circle and nudged
   // up so the feet sit near the player position
   const size = p.radius * 3.0;
@@ -531,8 +532,10 @@ function drawPlayer(ctx, p, frame, isSelf) {
       const faceW = faceH * (face.width / face.height);
       const bob = p.moving ? Math.sin(tnow / 110) * size * 0.05 : 0;
       const faceDx = size * 0.12;  // face sits left of center; nudge it right
+      // when he's a Ferrari, perch the face above the car instead of over the head
+      const faceY = car ? (p.y - size * 0.95 + bob) : (cy - size * 0.32 + bob);
       ctx.save();
-      ctx.translate(p.x + faceDx, cy - size * 0.32 + bob);
+      ctx.translate(p.x + faceDx, faceY);
       if (p.dir.x < 0) ctx.scale(-1, 1);   // mirror when facing left
       ctx.drawImage(face, -faceW / 2, -faceH / 2, faceW, faceH);
       ctx.restore();
