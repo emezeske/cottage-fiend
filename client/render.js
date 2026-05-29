@@ -184,11 +184,11 @@ function drawGoldenCurds(ctx, state) {
     const t = elapsed / GOLDEN_MS;                      // 0..1
     const aspect = (img && img.width) ? img.height / img.width : 0.667;
     const cx = p.x;
-    const cy = p.y - p.radius * 1.5 - 95;               // float well above the head
+    const cy = p.y;                                     // centered on the player
     // big image: ease-out zoom from tiny to full over the first 70%
     const grow = Math.min(1, t / 0.7);
     const ease = 1 - Math.pow(1 - grow, 3);
-    const w = 120 * (0.12 + 0.88 * ease);               // ~20% of the screen at full size
+    const w = 240 * (0.12 + 0.88 * ease);               // big and prominent at full size
     const h = w * aspect;
     if (img) {
       // kaleidoscope: smaller copies orbiting + self-rotating around the big one
