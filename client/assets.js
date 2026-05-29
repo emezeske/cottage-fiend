@@ -37,6 +37,8 @@ for (const d of DIRS) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.png`;
 for (const d of DIRS) MANIFEST[`corgi_${d}`] = `corgi_${d}.png`;
 // disc_{0..7} — spin frames for the DISC_GOLF projectiles
 for (let i = 0; i < 8; i++) MANIFEST[`disc_${i}`] = `disc_${i}.png`;
+// discoball_{0..2} — shimmer frames hovering over dance-party players
+for (let i = 0; i < 3; i++) MANIFEST[`discoball_${i}`] = `discoball_${i}.png`;
 
 export const images = {};
 

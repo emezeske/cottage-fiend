@@ -159,7 +159,7 @@ function connect(name) {
       if (inv && !invLoopOn) { playLoop('invincible_theme', 0.5); duckMusic(true); invLoopOn = true; }
       else if (!inv && invLoopOn) { stopLoop('invincible_theme'); duckMusic(false); invLoopOn = false; }
       // dance-party music: loops for the initiator + dancers, ducking the bg theme
-      const dance = !!(meNow && meNow.danceMusic);
+      const dance = !!(meNow && meNow.danceParty);
       if (dance && !danceLoopOn) { playLoop('dance_party_theme', 0.6); duckMusic(true); danceLoopOn = true; }
       else if (!dance && danceLoopOn) { stopLoop('dance_party_theme'); duckMusic(false); danceLoopOn = false; }
       // first-curd cue is exclusive with the regular score cue: when the round's

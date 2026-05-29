@@ -131,8 +131,8 @@ export class Game {
       noPickupUntilMs: 0,         // auto-pickup suppressed until this clock time (after a forced drop)
       stunnedUntilMs: 0,          // frozen (can't act) until this clock time (Mallen devour shockwave)
       adStunUntilMs: 0,           // frozen specifically by the interstitial-ad debuff (for the above-head icon)
-      danceUntilMs: 0,            // forced to dance (stunned, but rendered dancing) until this clock time
-      dancePartyUntilMs: 0,       // hears the dance-party music until this clock time (initiator + dancers)
+      danceUntilMs: 0,            // forced to dance (stunned, rendered dancing) until this clock time
+      dancePartyHostUntilMs: 0,   // you're HOSTING a dance party (a moving aura + your music) until this
       dashUntilMs: 0,             // Mallen lunge active until this clock time
       dashVx: 0, dashVy: 0,       // lunge velocity
     };
@@ -539,11 +539,9 @@ export class Game {
       this.events.push({ type: 'pinata', x: p.x, y: p.y });
     } else if (fx === FX.INTERSTITIAL) {
       // forced ad break: freeze the claimer (the client shows a skippable
-      // full-screen ad) — they keep their tub but can't act, so they're a sitting duck.
-      p.stunnedUntilMs = now + EFFECT.interstitialMs;
+      // full-screen ad) and knock their tub loose like any other stun.
+      this._stunPlayer(p, now, EFFECT.interstitialMs);
       p.adStunUntilMs = now + EFFECT.interstitialMs; // drives the above-head ad icon for others
-      p.vx = 0; p.vy = 0;
-      p.charging = false;
     } else if (fx === FX.GOLDEN_CURD) {
       // instant point + a brief celebratory freeze (the client plays the big
       // zoom/kaleidoscope animation, visible to everyone, for the same duration)
@@ -565,20 +563,27 @@ export class Game {
       });
       this.events.push({ type: 'corgiSpawn', x: p.x, y: p.y });
     } else if (fx === FX.DANCE_PARTY) {
-      // the initiator is unaffected but hears the music; everyone nearby is forced
-      // to dance (a stun, rendered as dancing) and hears the music for the duration
-      const until = now + DANCE.durationMs;
-      p.dancePartyUntilMs = until;
-      for (const o of this.players.values()) {
-        if (o.id === p.id || o.effect === FX.INVINCIBLE) continue;
-        if (dist(p.x, p.y, o.x, o.y) > DANCE.radius) continue;
-        o.stunnedUntilMs = until;
-        o.danceUntilMs = until;
-        o.dancePartyUntilMs = until;
-        o.vx = 0; o.vy = 0;
-        o.charging = false;
-      }
+      // become a dance-party HOST for the duration: the initiator is free to roam
+      // (with lights + disco ball above their head), and each tick anyone within
+      // radius — whether they were near at the start or wandered in / got rolled
+      // over later — is forced to dance. Handled in _updateDanceParty.
+      p.dancePartyHostUntilMs = now + DANCE.durationMs;
       this.events.push({ type: 'danceParty', x: p.x, y: p.y });
+    }
+  }
+
+  // Continuous dance-party aura: each active host forces every eligible player
+  // currently within radius to dance (a stun — drops their tub). Refreshed each
+  // tick, so dancers stop shortly after they leave the floor (or the host stops).
+  _updateDanceParty(now) {
+    for (const h of this.players.values()) {
+      if (now >= h.dancePartyHostUntilMs) continue;
+      for (const o of this.players.values()) {
+        if (o.id === h.id || o.effect === FX.INVINCIBLE) continue;
+        if (dist(h.x, h.y, o.x, o.y) > DANCE.radius) continue;
+        this._stunPlayer(o, now, DANCE.refreshMs); // stun + drop tub (first catch only)
+        o.danceUntilMs = now + DANCE.refreshMs;
+      }
     }
   }
 
@@ -746,6 +751,7 @@ export class Game {
       this._mallenLogic(now);
       this._updateCorgis(dt, now);
       this._updateDiscGolf(dt, now);
+      this._updateDanceParty(now);
       this._checkCarriedDeliveries();
       this._capTubs();
       this._checkDominating();
@@ -1037,7 +1043,7 @@ export class Game {
       p.ready = false;
       p.effect = null; p.effectUntilMs = 0; p.cannonArmed = false; p.greaseGrabMs = -1;
       p.noPickupUntilMs = 0; p.stunnedUntilMs = 0; p.adStunUntilMs = 0; p.vx = 0; p.vy = 0;
-      p.danceUntilMs = 0; p.dancePartyUntilMs = 0;
+      p.danceUntilMs = 0; p.dancePartyHostUntilMs = 0;
       p.dashUntilMs = 0; p.dashVx = 0; p.dashVy = 0;
     }
     this.phase = PHASE.COUNTDOWN;
@@ -1075,8 +1081,9 @@ export class Game {
         charging: p.charging, frenzy: p.frenzyMs > 0, ready: !!p.ready,
         stunned: (this._clock || 0) < p.stunnedUntilMs,
         adStunned: (this._clock || 0) < p.adStunUntilMs,
-        dancing: (this._clock || 0) < p.danceUntilMs,
-        danceMusic: (this._clock || 0) < p.dancePartyUntilMs,
+        dancing: (this._clock || 0) < p.danceUntilMs, // stunned dancers (bob/sway)
+        // host OR dancer: gets the lights, hovering disco ball, and the music
+        danceParty: (this._clock || 0) < p.danceUntilMs || (this._clock || 0) < p.dancePartyHostUntilMs,
         dashing: (this._clock || 0) < p.dashUntilMs,
         spriteIndex: p.spriteIndex,
         effect: p.effect,

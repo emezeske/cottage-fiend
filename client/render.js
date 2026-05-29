@@ -491,6 +491,13 @@ function drawDiscs(ctx, state) {
   }
 }
 
+// A shimmering disco ball hovering above a dance-party player's head.
+function drawDiscoBall(ctx, x, cy, size, t) {
+  const img = images[`discoball_${(t / 140 | 0) % 3}`];
+  const by = cy - size * 1.28 + Math.sin(t / 420) * size * 0.05;
+  if (img) drawSprite(ctx, img, x, by, size * 0.62, size * 0.62);
+}
+
 // Disco spotlights shining down on a dancing player — colored beams that sway
 // and cycle hue.
 function drawDanceLights(ctx, x, cy, size, t) {
@@ -518,7 +525,8 @@ function drawPlayer(ctx, p, frame, isSelf) {
   // golden-curd celebration freezes the player too, but it's a buff — show the
   // golden animation (drawGoldenCurds) instead of the debuff stun visuals.
   const golden = isGolden(p.id);
-  const dancing = !!p.dancing; // dance-party: stunned, but rendered dancing under disco lights
+  const dancing = !!p.dancing;       // dance-party victim: stunned, rendered dancing
+  const danceParty = !!p.danceParty; // host OR dancer: gets the lights + hovering disco ball
   // stunned = rapid frame flicker; otherwise walk only while moving
   const f = (p.stunned && !golden && !dancing) ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
   let img;
@@ -535,8 +543,10 @@ function drawPlayer(ctx, p, frame, isSelf) {
   if (p.stunned && !golden && !dancing) px += (Math.random() - 0.5) * 4; // jitter/shake
   if (p.dashing) addDashTrail(p.x, cy, size * 0.42);
 
+  // dance lights wash over the host AND every dancer (behind the sprite)
+  if (danceParty) drawDanceLights(ctx, px, cy, size, tnow);
+
   if (dancing) {
-    drawDanceLights(ctx, px, cy, size, tnow);
     const bob = Math.abs(Math.sin(tnow / 130)) * size * 0.16;  // bounce up to the beat
     const sway = Math.sin(tnow / 190) * size * 0.11;           // sway side to side
     drawSprite(ctx, img, px + sway, cy - bob, size, size);
@@ -648,6 +658,9 @@ function drawPlayer(ctx, p, frame, isSelf) {
     ctx.strokeText(label, p.x, topY - 16);
     ctx.fillText(label, p.x, topY - 16);
   }
+
+  // disco ball hovers above the head for the host AND every dancer (on top)
+  if (danceParty) drawDiscoBall(ctx, px, cy, size, tnow);
 }
 
 function drawChargeArc(ctx, charge) {

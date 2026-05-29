@@ -188,7 +188,8 @@ export const FX = {
 // for the duration (the initiator is unaffected). They + the initiator hear the music.
 export const DANCE = {
   radius: 420,           // generous — catches everyone roughly on-screen near the initiator
-  durationMs: 6000,
+  durationMs: 6000,      // how long the host's aura (and their music) lasts
+  refreshMs: 350,        // dancers are re-caught each tick; they stop ~this long after leaving the floor
 };
 
 // Disc-golf buff: while active, the player periodically flings a spinning disc in a

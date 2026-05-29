@@ -525,7 +525,7 @@ test('presents never land on top of the truck or fridge', () => {
   }
 });
 
-test('dance party makes nearby players dance (stun) but not the initiator', () => {
+test('dance party: a moving aura forces anyone in radius to dance and drop their tub', () => {
   assert.ok(BUFF_POOL.some(e => e.fx === FX.DANCE_PARTY), 'dance party is a buff');
   assert.ok(ONE_SHOT.has(FX.DANCE_PARTY), 'dance party is a one-shot');
   const g = newGame();
@@ -534,17 +534,21 @@ test('dance party makes nearby players dance (stun) but not the initiator', () =
   const far = g.addPlayer('far');
   g.startRound();
   advance(g, 3200);
-  const now = g._clock;
   const d = g.players.get(dj), n = g.players.get(near), f = g.players.get(far);
   d.x = 800; d.y = 800; n.x = 900; n.y = 800; f.x = 800; f.y = 1400; // near in range, far out
-  g._applyOneShot(d, FX.DANCE_PARTY, now);
-  // DJ: hears the music, NOT stunned/dancing
-  assert.ok(d.dancePartyUntilMs > now, 'dj hears the music');
-  assert.ok(now >= d.stunnedUntilMs && now >= d.danceUntilMs, 'dj is not stunned');
-  // near: dancing + stunned + hears music
-  assert.ok(n.danceUntilMs > now && n.stunnedUntilMs > now && n.dancePartyUntilMs > now, 'near dances');
-  // far: untouched
-  assert.ok(now >= f.danceUntilMs && now >= f.stunnedUntilMs && now >= f.dancePartyUntilMs, 'far unaffected');
+  giveTub(g, near);
+  assert.notEqual(n.carryingTubId, null);
+  g._applyOneShot(d, FX.DANCE_PARTY, g._clock);
+  advance(g, 50);
+  assert.ok(d.dancePartyHostUntilMs > g._clock, 'dj is the host');
+  assert.ok(g._clock >= d.danceUntilMs, 'dj roams free (not dancing)');
+  assert.ok(n.danceUntilMs > g._clock && n.stunnedUntilMs > g._clock, 'near is dancing/stunned');
+  assert.equal(n.carryingTubId, null, 'the dance stun dropped near\'s tub');
+  assert.ok(g._clock >= f.danceUntilMs, 'far not yet dancing');
+  // far wanders into the aura later -> starts dancing
+  f.x = 850; f.y = 800;
+  advance(g, 50);
+  assert.ok(g.players.get(far).danceUntilMs > g._clock, 'far joins once inside the radius');
 });
 
 test('dominating cue fires once (for the leader) when 5+ points ahead', () => {
