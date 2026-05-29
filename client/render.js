@@ -7,7 +7,7 @@ import { computeCamera, getCamera } from './camera.js';
 
 const PHASE = { LOBBY: 'lobby', COUNTDOWN: 'countdown', PLAYING: 'playing', LEADERBOARD: 'leaderboard' };
 
-const AD_H = 70; // height of the top ad banner (CSS px); HUD sits below it
+export const AD_H = 70; // height of the top ad banner (CSS px); HUD sits below it
 
 const EFFECT_LABELS = {
   double_speed: '⚡2X SPEED', two_x_points: '2X PTS', invincible: '🛡INVINCIBLE',
@@ -109,6 +109,53 @@ function drawBams(ctx) {
   ctx.textBaseline = 'alphabetic';
 }
 
+// white "poof" puffs on a punch swing (so a whiff still reads as a punch)
+const poofs = [];
+export function addPoof(x, y) {
+  for (let i = 0; i < 5; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = Math.random() * 14;
+    poofs.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, t: 0, life: 340, r: 8 + Math.random() * 8 });
+  }
+}
+function drawPoofs(ctx) {
+  for (let i = poofs.length - 1; i >= 0; i--) {
+    const p = poofs[i];
+    p.t += 16;
+    const k = p.t / p.life;
+    if (k >= 1) { poofs.splice(i, 1); continue; }
+    ctx.save();
+    ctx.globalAlpha = (1 - k) * 0.7;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (0.6 + k * 1.1), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// rapid rainbow after-trail dropped while the Mallen dashes
+const dashTrail = [];
+export function addDashTrail(x, y, r) {
+  dashTrail.push({ x, y, r, t: 0, life: 340, hue: (performance.now() * 0.9) % 360 });
+}
+
+function drawDashTrail(ctx) {
+  for (let i = dashTrail.length - 1; i >= 0; i--) {
+    const d = dashTrail[i];
+    d.t += 16;
+    const a = Math.max(0, 1 - d.t / d.life);
+    if (a <= 0) { dashTrail.splice(i, 1); continue; }
+    ctx.save();
+    ctx.globalAlpha = a * 0.6;
+    ctx.fillStyle = `hsl(${d.hue},100%,60%)`;
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r * (0.45 + a * 0.55), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 function drawConfetti(ctx) {
   for (let i = confetti.length - 1; i >= 0; i--) {
     const c = confetti[i];
@@ -167,11 +214,16 @@ export function render(ctx, canvas, state, selfId, charge) {
     drawSprite(ctx, images.fridge, loci.fridge.x, loci.fridge.y, 110, 130);
     if (!images.truck) fallbackCircle(ctx, loci.truck.x, loci.truck.y, 60, '#ccd');
     if (!images.fridge) fallbackCircle(ctx, loci.fridge.x, loci.fridge.y, 54, '#dde');
+    if (state.phase === PHASE.PLAYING || state.phase === PHASE.COUNTDOWN) {
+      drawBounceMarker(ctx, loci.truck.x, loci.truck.y - 60, 'GRAB CURDS HERE', '#ffe14d');
+      drawBounceMarker(ctx, loci.fridge.x, loci.fridge.y - 65, 'DELIVER CURDS HERE', '#9ad7ff');
+    }
   }
 
   // tubs (ready/loose/flying — carried are drawn with their player)
   for (const t of tubs) {
     if (t.state === 'carried') continue;
+    if (t.state === 'flying' && Math.random() < 0.35) addSplat(t.x, t.y); // splat trail in flight
     drawSprite(ctx, images.tub, t.x, t.y, 36, 36);
     if (!images.tub) fallbackCircle(ctx, t.x, t.y, 15, '#f2f0e0');
   }
@@ -193,6 +245,7 @@ export function render(ctx, canvas, state, selfId, charge) {
 
   // walk frame: time-based (framerate-independent) and slower than before
   const animFrame = ((performance.now() / 230) | 0) & 1;
+  drawDashTrail(ctx);   // rainbow trail (behind players)
   for (const p of players) drawPlayer(ctx, p, animFrame, p.id === selfId);
 
   // carried tubs on top of their carriers
@@ -215,6 +268,7 @@ export function render(ctx, canvas, state, selfId, charge) {
 
   drawConfetti(ctx);
   drawBams(ctx);
+  drawPoofs(ctx);
 
   if (charge && charge.active) drawChargeArc(ctx, charge);
 
@@ -223,10 +277,19 @@ export function render(ctx, canvas, state, selfId, charge) {
   // ---- screen space ---------------------------------------------------------
   const self = players.find((p) => p.id === selfId);
 
-  // off-screen guidance arrows so you can navigate the panned arena
-  if (loci && self && state.phase === PHASE.PLAYING) {
-    if (self.carrying) locusArrow(ctx, cssW, cssH, loci.fridge, '🧊 FRIDGE', '#9ad7ff');
-    else locusArrow(ctx, cssW, cssH, loci.truck, '🚚 TUBS', '#ffe14d');
+  // off-screen edge arrows
+  if (state.phase === PHASE.PLAYING) {
+    // where everyone is: a small color-coded arrow per off-screen player, Mallen in red
+    for (const p of players) {
+      if (p.id === selfId) continue;
+      if (p.isMallen) edgeArrow(ctx, cssW, cssH, p, '#ff4d6a', '👹', 16);
+      else edgeArrow(ctx, cssW, cssH, p, PLAYER_COLORS[p.spriteIndex % PLAYER_COLORS.length], null, 11);
+    }
+    // bigger nav arrow to your current objective (truck or fridge), so it stands out
+    if (loci && self) {
+      if (self.carrying) edgeArrow(ctx, cssW, cssH, loci.fridge, '#9ad7ff', '🧊 FRIDGE', 24);
+      else edgeArrow(ctx, cssW, cssH, loci.truck, '#ffe14d', '🚚 TUBS', 24);
+    }
   }
 
   if (self && self.effect === 'blindness') drawBlindness(ctx, cssW, cssH);
@@ -241,6 +304,28 @@ export function render(ctx, canvas, state, selfId, charge) {
   drawTopAd(ctx, cssW);
 }
 
+// a bouncing label + down-arrow hovering above a prop (truck/fridge)
+function drawBounceMarker(ctx, x, propTopY, text, color) {
+  const bob = Math.sin(walkClock * 0.12) * 8;
+  const baseY = propTopY - 28 + bob;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 18px system-ui, sans-serif';
+  ctx.lineWidth = 4; ctx.strokeStyle = '#1e1814';
+  ctx.strokeText(text, x, baseY);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, baseY);
+  // downward arrow pointing at the prop
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x - 16, baseY + 10);
+  ctx.lineTo(x + 16, baseY + 10);
+  ctx.lineTo(x, baseY + 34);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
 function drawSafeZone(ctx, z) {
   ctx.save();
   ctx.fillStyle = 'rgba(120,220,255,0.07)';
@@ -253,17 +338,24 @@ function drawSafeZone(ctx, z) {
   ctx.fillStyle = 'rgba(170,235,255,0.9)';
   ctx.font = 'bold 17px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('PICKUP ZONE · NO MALLEN', z.x + z.w / 2, z.y - 9);
+  ctx.fillText('NO MALLEN ZONE', z.x + z.w / 2, z.y + z.h + 22); // below the zone, clear of the truck marker
   ctx.restore();
 }
 
 function drawFloor(ctx, arena) {
-  ctx.fillStyle = '#27331f';
-  ctx.fillRect(0, 0, arena.width, arena.height);
-  ctx.fillStyle = 'rgba(255,255,255,0.035)';
-  for (let gx = 0; gx < arena.width; gx += 64)
-    for (let gy = 0; gy < arena.height; gy += 64)
-      if ((gx / 64 + gy / 64) % 2 === 0) ctx.fillRect(gx, gy, 64, 64);
+  if (images.bg) {
+    const T = arena.width / 4;   // tile ~4x smaller than the arena (tweak the divisor)
+    for (let x = 0; x < arena.width; x += T)
+      for (let y = 0; y < arena.height; y += T)
+        ctx.drawImage(images.bg, x, y, T, T);
+  } else {
+    ctx.fillStyle = '#27331f';
+    ctx.fillRect(0, 0, arena.width, arena.height);
+    ctx.fillStyle = 'rgba(255,255,255,0.035)';
+    for (let gx = 0; gx < arena.width; gx += 64)
+      for (let gy = 0; gy < arena.height; gy += 64)
+        if ((gx / 64 + gy / 64) % 2 === 0) ctx.fillRect(gx, gy, 64, 64);
+  }
   ctx.strokeStyle = 'rgba(255,225,77,0.22)';
   ctx.lineWidth = 6;
   ctx.strokeRect(3, 3, arena.width - 6, arena.height - 6);
@@ -289,6 +381,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
   let px = p.x;
   const cy = p.y - size * 0.12;
   if (p.stunned) px += (Math.random() - 0.5) * 4; // jitter/shake
+  if (p.dashing) addDashTrail(p.x, cy, size * 0.42);
 
   if (p.stunned) {
     ctx.save();
@@ -307,13 +400,59 @@ function drawPlayer(ctx, p, frame, isSelf) {
   }
   if (!img) fallbackCircle(ctx, p.x, p.y, p.radius, p.isMallen ? '#a4c' : '#d96');
 
+  // facing arrow at the feet (color-coded) — shows your current punch/throw direction
+  {
+    const col = p.isMallen ? '#ff4d6a' : PLAYER_COLORS[p.spriteIndex % PLAYER_COLORS.length];
+    ctx.save();
+    ctx.translate(p.x, p.y + p.radius);
+    ctx.rotate(Math.atan2(p.dir.y, p.dir.x));
+    ctx.fillStyle = col; ctx.strokeStyle = '#1e1814'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    // a dart with a notched (concave) back so only the long tip reads as "forward"
+    ctx.moveTo(19, 0); ctx.lineTo(-8, -9); ctx.lineTo(1, 0); ctx.lineTo(-8, 9); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // The Mallen's real face, bobblehead-style over the demon's head — fiend face
+  // during frenzy, mirrored by facing, with a little bob while walking.
+  if (p.isMallen) {
+    const face = p.frenzy ? images.mallen_face_fiend : images.mallen_face;
+    if (face) {
+      const faceH = size * 0.62;
+      const faceW = faceH * (face.width / face.height);
+      const bob = p.moving ? Math.sin(tnow / 110) * size * 0.05 : 0;
+      const faceDx = size * 0.12;  // face sits left of center; nudge it right
+      ctx.save();
+      ctx.translate(p.x + faceDx, cy - size * 0.32 + bob);
+      if (p.dir.x < 0) ctx.scale(-1, 1);   // mirror when facing left
+      ctx.drawImage(face, -faceW / 2, -faceH / 2, faceW, faceH);
+      ctx.restore();
+    }
+  }
+
+  // invincible: three tiny tubs spinning in a halo around the head
+  if (p.effect === 'invincible' && images.tub) {
+    const headY = cy - size * 0.32;
+    const orbitR = size * 0.38;
+    const spin = performance.now() * 0.005;
+    const ts = size * 0.2;
+    for (let i = 0; i < 3; i++) {
+      const a = spin + (i / 3) * Math.PI * 2;
+      const tx = p.x + Math.cos(a) * orbitR;
+      const ty = headY + Math.sin(a) * orbitR * 0.45; // tilted ring
+      ctx.drawImage(images.tub, tx - ts / 2, ty - ts / 2, ts, ts);
+    }
+  }
+
   const topY = cy - size / 2 - 4;   // just above the sprite, so it never overlaps
+  const tag = `${p.name} (${p.isMallen ? p.eaten : p.score})`;
   ctx.font = 'bold 14px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.lineWidth = 3; ctx.strokeStyle = '#1e1814';
-  ctx.strokeText(p.name, p.x, topY);
+  ctx.strokeText(tag, p.x, topY);
   ctx.fillStyle = isSelf ? '#ffe14d' : '#fff';
-  ctx.fillText(p.name, p.x, topY);
+  ctx.fillText(tag, p.x, topY);
 
   if (p.stunned) {
     ctx.font = 'bold 13px system-ui, sans-serif';
@@ -347,8 +486,14 @@ function drawChargeArc(ctx, charge) {
   ctx.restore();
 }
 
-// An edge arrow pointing toward an off-screen world target (truck/fridge).
-function locusArrow(ctx, cssW, cssH, target, label, color) {
+// player-variant colors (match the 12 recolored delivery sprites)
+const PLAYER_COLORS = [
+  '#cd3c34', '#3a6ecd', '#46af5c', '#d7a834', '#9650c3', '#3ab6b2',
+  '#eb7d23', '#ee5faa', '#46cde1', '#a0cd37', '#8c5f37', '#cdcdd7',
+];
+
+// An edge arrow pointing toward an off-screen world target (player/mallen/locus).
+function edgeArrow(ctx, cssW, cssH, target, color, label, size) {
   const cam = getCamera();
   const sx = target.x * cam.scale + cam.offX;
   const sy = target.y * cam.scale + cam.offY;
@@ -359,7 +504,9 @@ function locusArrow(ctx, cssW, cssH, target, label, color) {
   const cx = cssW / 2, cy = (AD_H + cssH) / 2;
   const ang = Math.atan2(sy - cy, sx - cx);
   const px = Math.max(left, Math.min(right, sx));
-  const py = Math.max(top, Math.min(bottom, sy));
+  let py = Math.max(top, Math.min(bottom, sy));
+  // never let the arrow (or its label above it) ride up under the top ad banner
+  py = Math.max(py, AD_H + size + (label ? 24 : 4));
 
   ctx.save();
   ctx.translate(px, py);
@@ -368,16 +515,21 @@ function locusArrow(ctx, cssW, cssH, target, label, color) {
   ctx.strokeStyle = '#1e1814';
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(16, 0); ctx.lineTo(-8, -11); ctx.lineTo(-8, 11); ctx.closePath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size * 0.55, -size * 0.7);
+  ctx.lineTo(-size * 0.55, size * 0.7);
+  ctx.closePath();
   ctx.fill(); ctx.stroke();
   ctx.restore();
 
-  ctx.font = 'bold 12px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.lineWidth = 3; ctx.strokeStyle = '#1e1814';
-  ctx.strokeText(label, px, py - 16);
-  ctx.fillStyle = color;
-  ctx.fillText(label, px, py - 16);
+  if (label) {
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 3; ctx.strokeStyle = '#1e1814';
+    ctx.strokeText(label, px, py - size - 3);
+    ctx.fillStyle = color;
+    ctx.fillText(label, px, py - size - 3);
+  }
 }
 
 // ---- the single fake mobile-game ad banner --------------------------------
@@ -483,7 +635,7 @@ function drawTopAd(ctx, cssW) {
 function drawHUD(ctx, cssW, cssH, state, selfId) {
   ctx.textAlign = 'left';
   const deliveries = state.players.filter((p) => !p.isMallen)
-    .sort((a, b) => b.score - a.score).slice(0, 3);
+    .sort((a, b) => b.score - a.score).slice(0, 2);
   const mallen = state.players.find((p) => p.isMallen);
   const TITLE_FONT = 'bold 18px system-ui, sans-serif';
   const ROW_FONT = 'bold 16px system-ui, sans-serif';
@@ -514,19 +666,80 @@ function drawHUD(ctx, cssW, cssH, state, selfId) {
   }
 }
 
+// a swirling "hurricane" of cottage cheese tubs — concentric rings spinning at
+// different speeds/directions, radii pulsing in and out
+function drawTubHurricane(ctx, W, H) {
+  const t = performance.now();
+  const cx = W / 2, cy = H / 2;
+  const maxR = Math.max(W, H) * 0.62;
+  const rings = 7;
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  for (let r = 0; r < rings; r++) {
+    const frac = r / (rings - 1);
+    const radius = 50 + frac * maxR + Math.sin(t * 0.002 + r * 0.9) * 38;
+    const dir = r % 2 === 0 ? 1 : -1;
+    const spin = t * 0.0016 * dir * (1.3 - frac * 0.7); // inner rings whirl faster
+    const count = 6 + r * 3;
+    const sz = 40 - frac * 14;
+    for (let i = 0; i < count; i++) {
+      const a = spin + (i / count) * Math.PI * 2;
+      ctx.save();
+      ctx.translate(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius);
+      ctx.rotate(a + t * 0.004);
+      if (images.tub) ctx.drawImage(images.tub, -sz / 2, -sz / 2, sz, sz);
+      else { ctx.fillStyle = '#f2f0e0'; ctx.beginPath(); ctx.arc(0, 0, sz / 2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
 function drawCountdown(ctx, W, H, state) {
   const n = Math.ceil(state.countdownMs / 1000);
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.fillRect(0, 0, W, H);
+  drawTubHurricane(ctx, W, H);
+  ctx.textAlign = 'center';
+  // ROUND N: CURD intro banner
+  const title = `ROUND ${state.round || 1}: CURD`;
+  ctx.font = 'bold 64px system-ui, sans-serif';
+  ctx.lineWidth = 6; ctx.strokeStyle = '#1e1814';
+  ctx.strokeText(title, W / 2, H / 2 - 90, W - 24);
+  ctx.fillStyle = '#ff8ad4';
+  ctx.fillText(title, W / 2, H / 2 - 90, W - 24);
+  // countdown number
   ctx.fillStyle = '#ffe14d';
   ctx.font = 'bold 120px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(n > 0 ? n : 'GO!', W / 2, H / 2);
-  ctx.font = 'bold 28px system-ui, sans-serif';
-  ctx.fillText('GET YOUR CURDS READY', W / 2, H / 2 + 80, W - 24);
+  ctx.fillText(n > 0 ? n : 'GO!', W / 2, H / 2 + 40);
+  ctx.font = 'bold 26px system-ui, sans-serif';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('GET YOUR CURDS READY', W / 2, H / 2 + 110, W - 24);
+}
+
+// a grid of tubs rocking in place, adjacent rows tilting in opposite directions
+// (hamster-dance style). Drawn under the dark overlay so it's subtle.
+function drawTubHamsterDance(ctx, W, H) {
+  const t = performance.now();
+  const step = 88, sz = 58;
+  let row = 0;
+  for (let y = step / 2; y < H + sz; y += step, row++) {
+    const dir = row % 2 === 0 ? 1 : -1;
+    const ang = Math.sin(t * 0.005) * 0.4 * dir;
+    const bob = Math.cos(t * 0.005) * 5 * dir;
+    for (let x = step / 2; x < W + sz; x += step) {
+      ctx.save();
+      ctx.translate(x, y + bob);
+      ctx.rotate(ang);
+      if (images.tub) ctx.drawImage(images.tub, -sz / 2, -sz / 2, sz, sz);
+      else { ctx.fillStyle = '#f2f0e0'; ctx.beginPath(); ctx.arc(0, 0, sz / 2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+  }
 }
 
 function drawLeaderboard(ctx, W, H, state, selfId) {
+  drawTubHamsterDance(ctx, W, H);
   ctx.fillStyle = 'rgba(0,0,0,0.8)';
   ctx.fillRect(0, 0, W, H);
   ctx.textAlign = 'center';
@@ -544,12 +757,18 @@ function drawLeaderboard(ctx, W, H, state, selfId) {
     : `${w.name} STOCKED THE FRIDGE!`) : 'ROUND OVER';
   ctx.fillStyle = '#ffe14d';
   ctx.font = 'bold 26px system-ui, sans-serif';
-  ctx.fillText('🏆 ' + title, W / 2, AD_H + 260, W - 24);
+  ctx.fillText('🏆 ' + title, W / 2, AD_H + 256, W - 24);
+
+  // ready count up top (near the winner) so it's nowhere near the bottom LET'S GO button
+  const ready = state.players.filter((p) => p.ready).length;
+  ctx.fillStyle = '#9f9';
+  ctx.font = 'bold 20px system-ui, sans-serif';
+  ctx.fillText(`${ready}/${state.players.length} ready — press LET'S GO below (need 50%)`, W / 2, AD_H + 292, W - 24);
 
   const sorted = [...state.players].sort((a, b) =>
     (b.isMallen ? b.eaten : b.score) - (a.isMallen ? a.eaten : a.score));
   ctx.font = 'bold 22px system-ui, sans-serif';
-  let y = AD_H + 300;
+  let y = AD_H + 332;
   for (const p of sorted) {
     ctx.fillStyle = p.id === selfId ? '#ffe14d' : '#fff';
     const sc = p.isMallen ? `${p.eaten} tubs devoured` : `${p.score} delivered`;
@@ -557,14 +776,8 @@ function drawLeaderboard(ctx, W, H, state, selfId) {
     const crown = p.isMallen ? '👑 ' : '';
     ctx.fillText(`${crown}${p.name} — ${sc}${rd}`, W / 2, y, W - 24);
     y += 32;
-    if (y > H - 150) break;
+    if (y > H - 110) break;
   }
-
-  // sits above the fixed LET'S GO button (which occupies the bottom ~80px)
-  const ready = state.players.filter((p) => p.ready).length;
-  ctx.fillStyle = '#9f9';
-  ctx.font = 'bold 20px system-ui, sans-serif';
-  ctx.fillText(`${ready}/${state.players.length} ready — press LET'S GO 👇 (need 50%)`, W / 2, H - 100, W - 24);
 }
 
 let _blindBlobs = null;

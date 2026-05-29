@@ -6,14 +6,25 @@
 
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
-  PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN,
+  PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
 } from './constants.js';
+
+const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SFX
 import { dist, normalize, resolveCircleOverlap, clampToArena, chargePower } from './vec.js';
 import { placeLoci, randSpawn } from './spawn.js';
 import { rollEffect } from './effects.js';
 
 let _nextId = 1;
 export function _resetIds() { _nextId = 1; } // test helper
+
+// shortest distance from point (px,py) to the segment (ax,ay)-(bx,by)
+function segDist(px, py, ax, ay, bx, by) {
+  const abx = bx - ax, aby = by - ay;
+  const len2 = abx * abx + aby * aby;
+  let u = len2 > 0 ? ((px - ax) * abx + (py - ay) * aby) / len2 : 0;
+  u = u < 0 ? 0 : u > 1 ? 1 : u;
+  return Math.hypot(px - (ax + abx * u), py - (ay + aby * u));
+}
 
 export class Game {
   constructor({ rng = Math.random } = {}) {
@@ -31,6 +42,15 @@ export class Game {
     this.presents = [];         // parachuting gift boxes
     this._presentSeq = 1;
     this._nextPresentAt = null; // clock time of next present spawn (null = unscheduled)
+    this.roundNumber = 0;       // increments each round (for the ROUND N intro)
+    this._firstScored = false;  // has anyone scored yet this round (for FIRST CURD)
+  }
+
+  // Emit the global FIRST CURD cue the first time anyone scores in a round.
+  _maybeFirstCurd() {
+    if (this._firstScored) return;
+    this._firstScored = true;
+    this.events.push({ type: 'firstCurd' });
   }
 
   // ---- lifecycle ----------------------------------------------------------
@@ -64,6 +84,8 @@ export class Game {
       greaseGrabMs: -1,           // clock time greased player grabbed (-1 = none)
       noPickupUntilMs: 0,         // auto-pickup suppressed until this clock time (after a forced drop)
       stunnedUntilMs: 0,          // frozen (can't act) until this clock time (Mallen devour shockwave)
+      dashUntilMs: 0,             // Mallen lunge active until this clock time
+      dashVx: 0, dashVy: 0,       // lunge velocity
     };
     this.players.set(id, p);
     if (isMallen && this.mallenId == null) this.mallenId = id;
@@ -197,48 +219,51 @@ export class Game {
       : PUNCH.cooldownMs;
     if (now - p.lastAttackMs < cd) return;
     p.lastAttackMs = now;
-    this.events.push({ type: 'attack', x: p.x, y: p.y });
+    // id + facing (for the puncher's whiff poof) + cd (drives the cooldown clock)
+    this.events.push({ type: 'attack', x: p.x, y: p.y, id: p.id, dx: p.dir.x, dy: p.dir.y, cd });
 
-    // The Mallen lunges forward when he punches — a skill-based dash to close on
-    // fleeing delivery folk (you commit to your facing direction).
+    // The Mallen lunges forward when he punches — an ANIMATED dash (velocity over
+    // dashMs, applied in the movement loop), and we resolve the hit at where the
+    // lunge will land so the dash actually extends his reach.
+    let px = p.x, py = p.y;
     if (p.isMallen) {
-      p.x += p.dir.x * PUNCH.mallenDash;
-      p.y += p.dir.y * PUNCH.mallenDash;
+      const dashSpeed = PUNCH.mallenDash / (PUNCH.dashMs / 1000);
+      p.dashVx = p.dir.x * dashSpeed;
+      p.dashVy = p.dir.y * dashSpeed;
+      p.dashUntilMs = now + PUNCH.dashMs;
+      px = p.x + p.dir.x * PUNCH.mallenDash;
+      py = p.y + p.dir.y * PUNCH.mallenDash;
+      this.events.push({ type: 'dash', x: p.x, y: p.y });
     }
 
+    // The lunge sweeps from (p.x,p.y) to (px,py); hit everyone it plows through
+    // (not just the endpoint), so a long Mallen dash bowls over the whole crowd.
     const range = p.isMallen ? MALLEN.attackRange : p.radius + PUNCH.reach;
-    let target = null, td = Infinity;
     for (const o of this.players.values()) {
-      if (o.id === p.id) continue;
-      if (o.effect === FX.INVINCIBLE) continue;
-      const d = dist(p.x, p.y, o.x, o.y);
-      if (d < range + o.radius && d < td) { target = o; td = d; }
-    }
-    if (!target) return;
+      if (o.id === p.id || o.effect === FX.INVINCIBLE) continue;
+      if (segDist(o.x, o.y, p.x, p.y, px, py) >= range + o.radius) continue;
 
-    // comic BAM at the point of impact
-    this.events.push({ type: 'bam', x: target.x, y: target.y });
+      this.events.push({ type: 'bam', x: o.x, y: o.y });   // comic BAM at impact
+      o.x += p.dir.x * PUNCH.knockback;                     // shove in the punch direction
+      o.y += p.dir.y * PUNCH.knockback;
 
-    // shove the target in the punch (facing) direction
-    target.x += p.dir.x * PUNCH.knockback;
-    target.y += p.dir.y * PUNCH.knockback;
-
-    // knock their tub loose, launched the way you punched
-    if (target.carryingTubId != null) {
-      const t = this.tubs.find((t) => t.id === target.carryingTubId);
-      if (t) {
-        t.state = 'flying';
-        t.carrierId = null;
-        t.lastCarrierId = null;            // a punched-loose tub credits nobody if it lands
-        t.vx = p.dir.x * PUNCH.launchSpeed;
-        t.vy = p.dir.y * PUNCH.launchSpeed;
-        t.thrownBy = target.id;            // the victim can't instantly re-catch it
-        t.thrownGraceUntil = now + 400;
+      // knock their tub loose, launched the way you punched
+      if (o.carryingTubId != null) {
+        const t = this.tubs.find((t) => t.id === o.carryingTubId);
+        if (t) {
+          t.state = 'flying';
+          t.carrierId = null;
+          t.lastCarrierId = null;          // a punched-loose tub credits nobody if it lands
+          t.vx = p.dir.x * PUNCH.launchSpeed;
+          t.vy = p.dir.y * PUNCH.launchSpeed;
+          t.thrownBy = o.id;               // the victim can't instantly re-catch it
+          t.thrownGraceUntil = now + 400;
+        }
+        o.carryingTubId = null;
+        o.hitsTaken = 0;
+        this.events.push({ type: 'drop', x: o.x, y: o.y });
+        this.events.push({ type: 'splat', x: o.x, y: o.y });
       }
-      target.carryingTubId = null;
-      target.hitsTaken = 0;
-      this.events.push({ type: 'drop', x: target.x, y: target.y });
-      this.events.push({ type: 'splat', x: target.x, y: target.y });
     }
   }
 
@@ -354,7 +379,8 @@ export class Game {
         if (dist(p.x, p.y, g.x, g.y) < p.radius + PRESENT.radius) {
           g._claimed = true;
           this._applyPresent(p, now);
-          this.events.push({ type: 'presentClaim', x: g.x, y: g.y, fx: p._lastFx });
+          this.events.push({ type: 'presentClaim', x: g.x, y: g.y, fx: p._lastFx,
+                             id: p.id, buff: !DEBUFF_FX.has(p._lastFx) });
           break;
         }
       }
@@ -449,7 +475,12 @@ export class Game {
           const n = { x: (p.x - t.x) / d, y: (p.y - t.y) / d };
           t.x += n.x * EFFECT.magnetPull * dt;
           t.y += n.y * EFFECT.magnetPull * dt;
-          if (t.state === 'ready') t.state = 'loose'; // pulled off the truck
+          if (t.state === 'ready') {
+            // pulled off the truck — refill on the normal 1s timer (not the
+            // instant safety-net respawn), so the magnet can't spawn infinite tubs
+            t.state = 'loose';
+            this._scheduleTruckRefill(this._clock || 0);
+          }
         }
       }
     }
@@ -470,7 +501,13 @@ export class Game {
       const speed = this._effectiveSpeed(p);
       // locked = mallen mid-chomp, or anyone stunned by a Mallen devour
       const locked = (p.isMallen && now < p.eatingUntilMs) || now < p.stunnedUntilMs;
-      if (!locked) {
+      if (locked) {
+        p.vx = 0; p.vy = 0;          // frozen: no coasting through a stun
+      } else if (now < p.dashUntilMs) {
+        p.vx = p.dashVx; p.vy = p.dashVy;  // Mallen lunge overrides input
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      } else {
         const tvx = p.moveInput.x * speed, tvy = p.moveInput.y * speed;
         if (p.effect === FX.BANANA) {
           // 'slidey': ease velocity toward input, and coast to a stop on release
@@ -482,8 +519,6 @@ export class Game {
         }
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-      } else {
-        p.vx = 0; p.vy = 0;        // frozen: no coasting through a stun
       }
       const c = clampToArena(p.x, p.y, p.radius, ARENA);
       p.x = c.x; p.y = c.y;
@@ -686,7 +721,8 @@ export class Game {
       scorer.score += pts;
     }
     this.events.push({ type: 'score', x: this.loci.fridge.x, y: this.loci.fridge.y,
-                       name: scorer ? scorer.name : null });
+                       name: scorer ? scorer.name : null, id: scorer ? scorer.id : null });
+    this._maybeFirstCurd();
   }
 
   // Mallen devour shockwave: stun every nearby delivery player (freeze + drop
@@ -728,7 +764,8 @@ export class Game {
         m.eatingUntilMs = now + MALLEN.eatDurationMs;
         m.frenzyMs = FRENZY.durationMs;
         m.radius = this._computeRadius(m); // reflect frenzy growth immediately
-        this.events.push({ type: 'chomp', x: m.x, y: m.y });
+        this.events.push({ type: 'chomp', x: m.x, y: m.y, id: m.id });
+        this._maybeFirstCurd();
         this._stunNearby(m, now);
         break;
       }
@@ -764,6 +801,8 @@ export class Game {
   }
 
   startRound() {
+    this.roundNumber += 1;
+    this._firstScored = false;
     this.loci = placeLoci(ARENA, LOCI, this.rng);
     this._computeSafeZone();
     this.tubs = [];
@@ -778,6 +817,7 @@ export class Game {
       p.ready = false;
       p.effect = null; p.effectUntilMs = 0; p.cannonArmed = false; p.greaseGrabMs = -1;
       p.noPickupUntilMs = 0; p.stunnedUntilMs = 0; p.vx = 0; p.vy = 0;
+      p.dashUntilMs = 0; p.dashVx = 0; p.dashVy = 0;
     }
     this.phase = PHASE.COUNTDOWN;
     this.countdownMs = ROUND.startCountdownMs;
@@ -786,6 +826,7 @@ export class Game {
     this.presents = [];
     this._nextPresentAt = null;
     this._stockTruck();
+    this.events.push({ type: 'roundStart', n: this.roundNumber });
   }
 
   drainEvents() {
@@ -798,6 +839,7 @@ export class Game {
   snapshot() {
     return {
       phase: this.phase,
+      round: this.roundNumber,
       countdownMs: Math.max(0, Math.round(this.countdownMs)),
       arena: { width: ARENA.width, height: ARENA.height },
       loci: this.loci,
@@ -809,6 +851,7 @@ export class Game {
         score: p.score, eaten: p.eaten, carrying: p.carryingTubId != null,
         charging: p.charging, frenzy: p.frenzyMs > 0, ready: !!p.ready,
         stunned: (this._clock || 0) < p.stunnedUntilMs,
+        dashing: (this._clock || 0) < p.dashUntilMs,
         spriteIndex: p.spriteIndex,
         effect: p.effect,
         effectMs: p.effect ? Math.max(0, Math.round(p.effectUntilMs - (this._clock || 0))) : 0,

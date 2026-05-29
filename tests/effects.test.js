@@ -124,6 +124,19 @@ test('slidey (banana) coasts after input stops', () => {
   assert.ok(Math.abs(q.x - qx) < 1, 'normal player stops on a dime');
 });
 
+test('magnet near the truck does not spawn infinite tubs', () => {
+  const g = newGame();
+  const id = g.addPlayer('a');
+  g.startRound();              // stocks one ready tub
+  g.phase = PHASE.PLAYING;     // skip countdown
+  const p = g.players.get(id);
+  p.effect = FX.MAGNET; p.effectUntilMs = 999999;
+  const ready = g.tubs.find((t) => t.state === 'ready');
+  p.x = ready.x + 50; p.y = ready.y; // near (not on) the tub so the magnet pulls it
+  advance(g, 3000);
+  assert.ok(g.tubs.length <= 8, `tub count stayed bounded, got ${g.tubs.length}`);
+});
+
 test('2x points buff doubles a delivery', () => {
   const g = newGame();
   const id = g.addPlayer('alice');
@@ -141,16 +154,17 @@ test('2x points buff doubles a delivery', () => {
   assert.equal(g.players.get(id).score, 2, 'delivery should count double');
 });
 
-test('invincibility prevents the mallen from landing hits', () => {
+test('invincibility makes a punch/attack skip you (you keep your tub)', () => {
   const g = newGame();
   const victim = g.addPlayer('victim');
   const mid = g.addPlayer('mallen');
   g.phase = PHASE.PLAYING;
   const v = g.players.get(victim), m = g.players.get(mid);
+  giveTub(g, victim);
   v.effect = FX.INVINCIBLE; v.effectUntilMs = 99999;
-  v.x = 400; v.y = 400; m.x = 400; m.y = 400;
-  advance(g, MALLEN.attackCooldownMs * 3);
-  assert.equal(g.players.get(victim).hitsTaken, 0, 'invincible victim takes no hits');
+  v.x = 400; v.y = 400; m.x = 420; m.y = 400; m.dir = { x: -1, y: 0 }; // facing/lunging at the victim
+  g.punch(mid, 0);
+  assert.equal(g.players.get(victim).carryingTubId != null, true, 'invincible victim keeps their tub');
 });
 
 test('explosion one-shot knocks back nearby players', () => {
@@ -213,7 +227,7 @@ test('curd cannon makes the next throw fly far enough to score from range', () =
   tub.x = p.x; tub.y = p.y;
   g.setInput(id, 1, 0);
   g.startCharge(id, 0);
-  g.release(id, 333);                // ~peak power at 1.5Hz
+  g.release(id, 500);                // ~peak power at 1.0Hz
   advance(g, 400);
   assert.equal(g.players.get(id).score, 1, 'a mega cannon throw reaches the fridge from range');
   assert.equal(g.players.get(id).cannonArmed, false, 'cannon disarms after the throw');

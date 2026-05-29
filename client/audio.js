@@ -12,20 +12,144 @@ const FILE_SOUNDS = {
   // roundEnd: 'cheer.wav',
 };
 
+// Named SFX files (placeholders — all currently the same test clip; overwrite
+// each file individually later). Some are played globally, some locally — see main.js.
+const SFX_FILES = {
+  dash: 'sfx_dash.mp3',          // global: Mallen dash
+  firstCurd: 'sfx_first_curd.mp3', // global: first score of the round
+  round: 'sfx_round.mp3',        // global: round start
+  score: 'sfx_score.mp3',        // local: you scored
+  ad: 'sfx_ad.mp3',              // local: tapped the top ad banner
+  // local: one per power-up / curse / wildcard effect (keyed by effect id)
+  double_speed: 'sfx_double_speed.mp3',
+  two_x_points: 'sfx_two_x_points.mp3',
+  invincible: 'sfx_invincible.mp3',
+  explosion: 'sfx_explosion.mp3',
+  magnet: 'sfx_magnet.mp3',
+  curd_cannon: 'sfx_curd_cannon.mp3',
+  half_speed: 'sfx_half_speed.mp3',
+  backwards: 'sfx_backwards.mp3',
+  greased: 'sfx_greased.mp3',
+  tiny: 'sfx_tiny.mp3',
+  blindness: 'sfx_blindness.mp3',
+  banana: 'sfx_banana.mp3',
+  swap: 'sfx_swap.mp3',
+  pinata: 'sfx_pinata.mp3',
+  invincible_theme: 'invincible.mp3', // looped locally while you're invincible
+};
+
+// Looping background music per game screen (crossfaded between).
+const MUSIC_FILES = { title: 'title.mp3', gameplay: 'gameplay.mp3', score: 'score.mp3' };
+const MUSIC_VOL = 0.15; // background music sits well under the SFX
+const musicBuffers = {}; // name -> AudioBuffer
+const musicNodes = {};   // name -> { src, g } currently playing
+let desiredMusic = null;
+
 let ctx = null;
 const buffers = {};
+const sfx = {}; // name -> decoded AudioBuffer
+const rawBytes = {}; // url -> ArrayBuffer, fetched during preload (decoded on join)
+
+function url_sound(f) { return `assets/sounds/${f}`; }
+function url_music(f) { return `assets/music/${f}`; }
+
+// Fetch every audio file's bytes up front (no AudioContext / user gesture needed).
+// Decoding happens on join, instantly, from these cached bytes. Returns a Promise.
+export function prefetchAudio() {
+  const urls = [
+    ...Object.values(FILE_SOUNDS).map(url_sound),
+    ...Object.values(SFX_FILES).map(url_sound),
+    ...Object.values(MUSIC_FILES).map(url_music),
+  ];
+  return Promise.all(urls.map((u) =>
+    fetch(u).then((r) => r.arrayBuffer()).then((b) => { rawBytes[u] = b; }).catch(() => {})
+  ));
+}
+
+function loadClip(u) {
+  const bytes = rawBytes[u] ? Promise.resolve(rawBytes[u]) : fetch(u).then((r) => r.arrayBuffer());
+  return bytes.then((b) => ctx.decodeAudioData(b));
+}
 
 export function initAudio() {
   if (ctx) return;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
-  // preload any file overrides
-  for (const [evt, file] of Object.entries(FILE_SOUNDS)) {
-    fetch(`assets/sounds/${file}`)
-      .then(r => r.arrayBuffer())
-      .then(b => ctx.decodeAudioData(b))
-      .then(buf => { buffers[evt] = buf; })
-      .catch(() => {/* fall back to procedural */});
-  }
+  if (ctx.state === 'suspended') ctx.resume(); // we're inside a user gesture (join/ready)
+  for (const [evt, file] of Object.entries(FILE_SOUNDS))
+    loadClip(url_sound(file)).then((buf) => { buffers[evt] = buf; }).catch(() => {});
+  for (const [name, file] of Object.entries(SFX_FILES))
+    loadClip(url_sound(file)).then((buf) => { sfx[name] = buf; }).catch(() => {});
+  for (const [name, file] of Object.entries(MUSIC_FILES))
+    loadClip(url_music(file))
+      .then((buf) => { musicBuffers[name] = buf; _startDesiredMusic(700); })
+      .catch((e) => console.warn('music load failed:', file, e));
+}
+
+// Play a named SFX clip (see SFX_FILES). No-op until loaded.
+export function playSound(name, gain = 0.6) {
+  if (!ctx || !sfx[name]) return;
+  if (ctx.state === 'suspended' && !document.hidden) ctx.resume();
+  playBuffer(sfx[name], gain);
+}
+
+// Looping clips (e.g. the invincibility theme). Idempotent start/stop.
+const loops = {}; // name -> { src, g }
+export function playLoop(name, gain = 0.5) {
+  if (!ctx || !sfx[name] || loops[name]) return;
+  if (ctx.state === 'suspended' && !document.hidden) ctx.resume();
+  const src = ctx.createBufferSource();
+  src.buffer = sfx[name]; src.loop = true;
+  const g = ctx.createGain(); g.gain.value = gain;
+  src.connect(g).connect(ctx.destination);
+  src.start();
+  loops[name] = { src, g };
+}
+export function stopLoop(name) {
+  const l = loops[name];
+  if (!l) return;
+  delete loops[name];
+  try { l.src.stop(); } catch {}
+}
+
+// Pause/resume the whole audio engine (call when the page is hidden/visible to
+// stop burning CPU on the audio thread while the screen is off).
+export function suspendAudio() { if (ctx && ctx.state === 'running') ctx.suspend(); }
+export function resumeAudio() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
+
+// Crossfade the looping background music to `name` (title/gameplay/score).
+export function setMusic(name, fadeMs = 700) {
+  if (!ctx || desiredMusic === name) return;
+  if (ctx.state === 'suspended' && !document.hidden) ctx.resume();
+  const old = desiredMusic;
+  desiredMusic = name;
+  if (old && musicNodes[old]) _fadeOutMusic(old, fadeMs);
+  _startDesiredMusic(fadeMs);
+}
+
+function _startDesiredMusic(fadeMs) {
+  const name = desiredMusic;
+  if (!name || !musicBuffers[name] || musicNodes[name]) return; // not loaded, or already playing
+  const src = ctx.createBufferSource();
+  src.buffer = musicBuffers[name];
+  src.loop = true;
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  src.connect(g).connect(ctx.destination);
+  src.start();
+  const t = ctx.currentTime;
+  g.gain.linearRampToValueAtTime(MUSIC_VOL, t + fadeMs / 1000);
+  musicNodes[name] = { src, g };
+}
+
+function _fadeOutMusic(name, fadeMs) {
+  const node = musicNodes[name];
+  if (!node) return;
+  delete musicNodes[name];
+  const t = ctx.currentTime;
+  node.g.gain.cancelScheduledValues(t);
+  node.g.gain.setValueAtTime(node.g.gain.value, t);
+  node.g.gain.linearRampToValueAtTime(0, t + fadeMs / 1000);
+  try { node.src.stop(t + fadeMs / 1000 + 0.05); } catch {}
 }
 
 function playBuffer(buf, gain = 1) {

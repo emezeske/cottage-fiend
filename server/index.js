@@ -23,6 +23,16 @@ const MIME = {
 
 const httpServer = http.createServer((req, res) => {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  // --- admin (no auth — it's a joke game) ---
+  if (urlPath === '/admin/reset' && req.method === 'POST') { // POST-only so a stray GET can't wipe state
+    game = new Game();                       // wipe all state
+    for (const ws of sockets.values()) { try { ws.close(); } catch {} } // kick clients to rejoin fresh
+    sockets.clear();
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('server reset — players must refresh to rejoin');
+    return;
+  }
+  if (urlPath === '/admin') urlPath = '/admin.html';
   if (urlPath === '/') urlPath = '/index.html';
   const filePath = path.join(CLIENT_DIR, path.normalize(urlPath));
   if (!filePath.startsWith(CLIENT_DIR)) { res.writeHead(403); res.end(); return; }
@@ -39,7 +49,7 @@ const httpServer = http.createServer((req, res) => {
 });
 
 // --- game + websockets ------------------------------------------------------
-const game = new Game();
+let game = new Game();
 const wss = new WebSocketServer({ server: httpServer });
 const sockets = new Map(); // id -> ws
 

@@ -1,8 +1,8 @@
 // Main client. Connects to the server, sends input, renders snapshots.
 
 import { loadAssets } from './assets.js';
-import { initAudio, playEvent } from './audio.js';
-import { render, addSplat, addConfetti, addBam, addChomp } from './render.js';
+import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop } from './audio.js';
+import { render, addSplat, addConfetti, addBam, addChomp, addPoof, AD_H } from './render.js';
 import { setupInput } from './input.js';
 import { screenToWorld } from './camera.js';
 
@@ -11,7 +11,7 @@ const MSG = {
   RELEASE: 'release', PUNCH: 'punch', READY: 'ready', WELCOME: 'welcome', STATE: 'state',
 };
 // throw tuning mirrored from server constants for the visual arc only
-const THROW = { minPower: 120, maxPower: 1600, oscillationHz: 1.5 };
+const THROW = { minPower: 40, maxPower: 1600, oscillationHz: 1.0 };
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -25,6 +25,36 @@ let ws = null;
 let selfId = null;
 let state = null;
 let prevPos = {};   // last-snapshot positions per player id, to detect movement
+let invLoopOn = false; // is the local invincibility theme looping
+const PREVIEW = new URLSearchParams(location.search).get('preview'); // admin screen preview
+
+// A fake snapshot for the /admin preview links — renders a screen with dummy
+// data, no server connection, so it never disturbs a live game.
+function fakeSnapshot(preview) {
+  const phase = preview === 'score' ? 'leaderboard' : preview; // map link name -> game phase
+  const mk = (id, name, isMallen, x, y, o = {}) => ({
+    id, name, x, y, dir: { x: 0, y: 1 }, isMallen, radius: isMallen ? 34 : 22,
+    score: o.score || 0, eaten: o.eaten || 0, carrying: false, charging: false,
+    frenzy: false, ready: !!o.ready, stunned: false, dashing: false,
+    spriteIndex: o.spriteIndex || 0, effect: null, effectMs: 0, moving: false,
+  });
+  return {
+    phase, round: 1,
+    arena: { width: 1600, height: 1600 },
+    loci: { truck: { x: 480, y: 800 }, fridge: { x: 1120, y: 800 } },
+    safeZone: { x: 330, y: 715, w: 300, h: 230 },
+    roundWinner: phase === 'leaderboard' ? { type: 'player', name: 'Curd Lord' } : null,
+    countdownMs: phase === 'countdown' ? 3000 : 0,
+    players: [
+      mk(1, 'Curd Lord', false, 760, 820, { score: 10, ready: true, spriteIndex: 0 }),
+      mk(2, 'mallen', true, 900, 760, { eaten: 6 }),
+      mk(3, 'Whey', false, 840, 880, { score: 7, spriteIndex: 2 }),
+      mk(4, 'Gouda', false, 700, 770, { score: 4, ready: true, spriteIndex: 7 }),
+    ],
+    tubs: [],
+    presents: [],
+  };
+}
 let chargeStartTs = 0;
 const charge = { active: false, x: 0, y: 0, dir: { x: 1, y: 0 },
                  power: THROW.minPower, minPower: THROW.minPower, maxPower: THROW.maxPower };
@@ -62,6 +92,15 @@ function connect(name) {
       prevPos = {};
       for (const p of snap.players) prevPos[p.id] = { x: p.x, y: p.y };
       state = snap;
+      // background music per screen (crossfades on change)
+      setMusic(snap.phase === 'leaderboard' ? 'score'
+        : (snap.phase === 'countdown' || snap.phase === 'playing') ? 'gameplay'
+        : 'title');
+      // invincibility theme: loops locally while you're invincible
+      const meNow = snap.players.find((p) => p.id === selfId);
+      const inv = !!(meNow && meNow.effect === 'invincible');
+      if (inv && !invLoopOn) { playLoop('invincible_theme', 0.5); invLoopOn = true; }
+      else if (!inv && invLoopOn) { stopLoop('invincible_theme'); invLoopOn = false; }
       for (const e of m.events || []) {
         playEvent(e.type);
         if (e.type === 'splat' || e.type === 'drop' ||
@@ -70,6 +109,23 @@ function connect(name) {
         if (e.type === 'chomp') addChomp(e.x, e.y);   // ravaging-curds burst
         if (e.type === 'score') addConfetti(e.x, e.y);
         if (e.type === 'bam') addBam(e.x, e.y);
+        if (e.type === 'attack') {
+          addPoof(e.x + (e.dx || 0) * 30, e.y + (e.dy || 0) * 30); // whiff cloud
+          if (e.id === selfId && e.cd) { actionCdUntil = performance.now() + e.cd; actionCdMs = e.cd; }
+        }
+        // dash: heard by everyone but attenuated by distance from the Mallen
+        // (inverse-square falloff), so far-away players barely hear it
+        if (e.type === 'dash') {
+          const p = me();
+          let g = 0.6;
+          if (p) g = 0.6 / (1 + ((Math.hypot(p.x - e.x, p.y - e.y)) / 350) ** 2);
+          if (g > 0.02) playSound('dash', g);
+        }
+        if (e.type === 'firstCurd') playSound('firstCurd');
+        if (e.type === 'roundStart') playSound('round');
+        // local SFX (only the affected player hears)
+        if ((e.type === 'score' || e.type === 'chomp') && e.id === selfId) playSound('score');
+        if (e.type === 'presentClaim' && e.id === selfId) playSound(e.fx); // per-effect sound
         if (e.type === 'explosion') {
           // a ring of splatters for the super-saiyan blast
           for (let i = 0; i < 8; i++) {
@@ -171,6 +227,20 @@ actionBtn.addEventListener('pointerup', onActionUp);
 actionBtn.addEventListener('pointercancel', onActionUp);
 actionBtn.addEventListener('pointerleave', onActionUp);
 
+// tapping (not dragging through) the top ad banner plays its (very important) jingle
+let adTapStart = null;
+canvas.addEventListener('pointerdown', (e) => {
+  const r = canvas.getBoundingClientRect();
+  adTapStart = (e.clientY - r.top <= AD_H) ? { x: e.clientX, y: e.clientY } : null;
+});
+canvas.addEventListener('pointerup', (e) => {
+  if (!adTapStart) return;
+  const moved = Math.hypot(e.clientX - adTapStart.x, e.clientY - adTapStart.y);
+  const r = canvas.getBoundingClientRect();
+  if (moved < 12 && e.clientY - r.top <= AD_H) playSound('ad');
+  adTapStart = null;
+});
+
 // UI buttons
 joinBtn.onclick = () => {
   const name = (nameInput.value || 'delivery').trim().slice(0, 16);
@@ -183,6 +253,8 @@ nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.cl
 goBtn.onclick = () => { initAudio(); send(MSG.READY); };
 
 let lastActionMode = null;
+let baseActionColor = '#ff6b5d';
+let actionCdUntil = 0, actionCdMs = 0;   // punch/attack cooldown clock
 function updateButtons() {
   if (!state) return;
   // show LET'S GO during lobby/leaderboard
@@ -192,11 +264,12 @@ function updateButtons() {
   const p = me();
   if (state.phase === 'playing' && p) {
     actionBtn.style.display = 'block';
-    const mode = p.carrying ? 'throw' : 'punch';
+    const mode = p.carrying ? 'throw' : (p.isMallen ? 'attack' : 'punch');
     if (mode !== lastActionMode) {
       lastActionMode = mode;
-      if (mode === 'throw') { actionBtn.innerHTML = 'HOLD TO<br>THROW'; actionBtn.style.background = '#ffb43d'; }
-      else { actionBtn.innerHTML = 'PUNCH'; actionBtn.style.background = '#ff6b5d'; }
+      if (mode === 'throw') { actionBtn.innerHTML = 'HOLD TO<br>THROW'; baseActionColor = '#ffb43d'; }
+      else if (mode === 'attack') { actionBtn.innerHTML = 'ATTACK'; baseActionColor = '#ff6b5d'; }
+      else { actionBtn.innerHTML = 'PUNCH'; baseActionColor = '#ff6b5d'; }
     }
   } else {
     actionBtn.style.display = 'none';
@@ -204,17 +277,58 @@ function updateButtons() {
   }
 }
 
+// paint the action button each frame, overlaying a depleting pie-clock wedge while
+// the punch/attack is on cooldown
+function paintActionButton() {
+  const now = performance.now();
+  if (now < actionCdUntil && actionCdMs > 0) {
+    const deg = ((actionCdUntil - now) / actionCdMs) * 360;
+    actionBtn.style.background =
+      `conic-gradient(rgba(0,0,0,0.45) ${deg}deg, rgba(0,0,0,0) ${deg}deg), ${baseActionColor}`;
+  } else {
+    actionBtn.style.background = baseActionColor;
+  }
+}
+
+// Pause audio + skip rendering while the tab/screen is hidden, to stop burning
+// CPU on the phone when the screen is off.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) suspendAudio(); else resumeAudio();
+});
+
 // render loop
 function loop() {
-  const p = me();
-  if (charge.active && p) {
-    charge.x = p.x; charge.y = p.y; charge.dir = p.dir;
-    charge.power = chargePower(performance.now() - chargeStartTs);
-  } else if (dragPos && p) {
-    steer();
+  if (!document.hidden) {
+    const p = me();
+    if (charge.active && p) {
+      charge.x = p.x; charge.y = p.y; charge.dir = p.dir;
+      charge.power = chargePower(performance.now() - chargeStartTs);
+    } else if (dragPos && p) {
+      steer();
+    }
+    render(ctx, canvas, state, selfId, charge);
+    paintActionButton();
   }
-  render(ctx, canvas, state, selfId, charge);
   requestAnimationFrame(loop);
 }
 
-loadAssets().then(() => { fitCanvas(); loop(); });
+// Preload everything (sprites + all audio bytes) so the first round is smooth.
+// Gate the JOIN button until it's all ready; start rendering once sprites are in.
+const assetsReady = loadAssets();
+const audioReady = prefetchAudio();
+const joinLabel = joinBtn.textContent;
+joinBtn.disabled = true;
+joinBtn.textContent = 'LOADING…';
+Promise.all([assetsReady, audioReady]).then(() => {
+  joinBtn.disabled = false;
+  joinBtn.textContent = joinLabel;
+});
+assetsReady.then(() => {
+  fitCanvas();
+  if (PREVIEW) {                       // admin preview: render a fake screen, no server
+    overlay.style.display = 'none';
+    selfId = 1;
+    state = fakeSnapshot(PREVIEW);
+  }
+  loop();
+});

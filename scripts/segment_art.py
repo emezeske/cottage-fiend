@@ -407,9 +407,19 @@ def do_sheet_debug(name, header):
     print(f'  wrote _{name[:-4]}_grid.png and _{name[:-4]}_cells.png')
 
 
+def do_faces():
+    print('mallen faces...')
+    # these already have real alpha — just trim margins and normalize size
+    for src, out in [('mallen_face_src.png', 'mallen_face.png'),
+                     ('mallen_face_fiend_src.png', 'mallen_face_fiend.png')]:
+        save(resize_max(trim(load(src)), 256), out)
+
+
 if __name__ == '__main__':
     import sys
     stages = sys.argv[1:] or ['tub']
+    if 'faces' in stages:
+        do_faces()
     if 'tub' in stages:
         do_tub()
     if 'general_debug' in stages:

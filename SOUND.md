@@ -1,0 +1,101 @@
+# Cottage Fiend — Sound Effects
+
+All sound files live in **`client/assets/sounds/`**. To replace a sound, just
+**record your clip and overwrite the file with the same name** — no code changes
+needed. Keep filenames exactly as listed.
+
+- **Format:** `.mp3` (also fine: `.wav`, `.ogg` — but keep the `.mp3` filename, or
+  tell me and I'll change the mapping in `client/audio.js`).
+- **Length:** short one-shots (most ≈ 0.3–1.5s). They play once, no looping.
+- These are currently all copies of one placeholder test clip.
+
+---
+
+## The six main SFX (record these)
+
+| File | Triggers when… | Who hears it |
+|------|----------------|--------------|
+| `sfx_dash.mp3` | The Mallen **dashes** (his ATTACK lunge) | Everyone, but **volume falls off with distance** from the Mallen — loud up close, silent across the map |
+| `sfx_first_curd.mp3` | The **first score of the round** by anyone — a delivery player delivering OR the Mallen devouring his first tub. Fires **once per round** | **Global** (everyone, full volume) |
+| `sfx_round.mp3` | A **round starts** (the "ROUND N: CURD" intro, during the countdown) | **Global** |
+| `sfx_score.mp3` | **You score** — a delivery player delivering a tub to the fridge, or the Mallen devouring a tub | **Local** — only the scorer |
+| `sfx_ad.mp3` | **You tap the top ad banner** | **Local** — only the tapper |
+
+Presents play a **per-effect** sound (see the next section) instead of one generic powerup/curse cue.
+
+Notes:
+- **Global** = the same sound plays for every connected player.
+- **Local** = only the one affected player's device plays it.
+- **Distance-attenuated** (dash only): gain ≈ `0.6 / (1 + (distance/350)²)`. Tunable
+  in `client/main.js` (the `350` reference distance).
+- On the **first** score of a round the scorer hears both `sfx_score` (local) and
+  everyone hears `sfx_first_curd` (global) — that's expected.
+
+---
+
+## Per-effect present sounds (one each)
+
+When **you** walk onto a parachuting present, you (and only you) hear the sound for
+the specific effect you rolled. The Mallen only ever rolls buffs (never the
+debuffs, and never curd cannon since he can't throw).
+
+**Buffs (good):**
+
+| File | Effect |
+|------|--------|
+| `sfx_double_speed.mp3` | move twice as fast |
+| `sfx_two_x_points.mp3` | next delivery / devour counts double |
+| `sfx_invincible.mp3` | can't be attacked, shoved, or stunned |
+| `sfx_explosion.mp3` | one-shot blast that knocks everyone back |
+| `sfx_magnet.mp3` | pulls loose tubs toward you |
+| `sfx_curd_cannon.mp3` | next throw flies ~10× as far (delivery only) |
+
+**Curses (bad):**
+
+| File | Effect |
+|------|--------|
+| `sfx_half_speed.mp3` | move at half speed |
+| `sfx_backwards.mp3` | controls are inverted |
+| `sfx_greased.mp3` | you drop a carried tub ~1s after grabbing it |
+| `sfx_tiny.mp3` | you shrink |
+| `sfx_blindness.mp3` | screen splattered with cottage cheese |
+| `sfx_banana.mp3` | slidey/ice-physics movement |
+
+**Wildcards (chaotic, anyone):**
+
+| File | Effect |
+|------|--------|
+| `sfx_swap.mp3` | swap positions with a random player |
+| `sfx_pinata.mp3` | drops a few loose tubs around you |
+
+---
+
+## Optional: replacing the other in-game sounds
+
+Everything else is currently **synthesized in-browser** (no file needed) in
+`client/audio.js`. To swap any of them for a real recording, drop a file in
+`client/assets/sounds/` and add a line to the `FILE_SOUNDS` map at the top of
+`client/audio.js`, e.g. `chomp: 'chomp.mp3',`. A present file overrides the
+synthesized version. These play **globally** (every player) when their event fires:
+
+| Event | Fires when… |
+|-------|-------------|
+| `pickup` | a tub is picked up / caught |
+| `throw` | a tub is thrown |
+| `score` | a delivery is scored at the fridge (plays a synth cheer for everyone — separate from the local `sfx_score`) |
+| `attack` | a punch/attack swing |
+| `bam` | a punch connects (the "BAM!" hit) — *(no synth sound yet; add to `FILE_SOUNDS` to give it one)* |
+| `drop` | a carried tub is knocked loose |
+| `chomp` | the Mallen devours a tub |
+| `stun` | the Mallen's devour shockwave stuns nearby players |
+| `splat` | a tub splatters (hit/landing) |
+| `presentDrop` | a present parachutes in |
+| `presentClaim` | a present is claimed (synth sparkle for everyone — separate from the local `sfx_powerup`/`sfx_curse`) |
+| `explosion` | the explosion power-up knockback |
+| `swap` | the swap-positions wildcard |
+| `pinata` | the tub-piñata wildcard |
+| `roundEnd` | a round is won |
+| `join` | a player joins |
+
+> Want any of these promoted to a dedicated named slot (like the six above) or
+> made local/distance-attenuated? Say which and I'll wire it up.

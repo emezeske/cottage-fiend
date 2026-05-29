@@ -56,7 +56,8 @@ export const PUNCH = {
   cooldownMs: 450,           // min time between delivery punches (Mallen uses MALLEN.attackCooldownMs)
   launchSpeed: 520,          // px/sec the knocked-loose tub flies
   knockback: 26,             // px the punched player is shoved
-  mallenDash: 85,            // px the Mallen lunges forward when he punches (skill-based)
+  mallenDash: 285,           // px the Mallen lunges forward when he punches (skill-based)
+  dashMs: 200,               // duration of that lunge (animated, not a teleport)
 };
 
 // Player-vs-player contact: the mover shoves whoever they run into.
@@ -73,9 +74,9 @@ export const SAFE_ZONE = {
 };
 
 export const THROW = {
-  minPower: 120,             // px/sec at weakest release (barely travels)
+  minPower: 40,              // px/sec at weakest release (basically drops at your feet)
   maxPower: 1600,            // px/sec at strongest release (~2x the old reach)
-  oscillationHz: 1.5,        // full charge cycles per second (lower = easier to time)
+  oscillationHz: 1.0,        // full charge cycles per second (lower = easier to time)
   // power oscillates min->max->min; release timing picks the value
 };
 
@@ -143,7 +144,7 @@ export const EFFECT = {
   tinyMult: 0.6,            // size multiplier while 'tiny'
   doubleSpeedMult: 2.0,
   halfSpeedMult: 0.5,
-  bananaAccel: 2.2,         // 'slidey': how fast velocity eases toward input (lower = more slippery; also the coast-to-stop rate)
+  bananaAccel: 0.7,         // 'slidey': how fast velocity eases toward input (lower = more slippery; also the coast-to-stop rate). low = chaotic ice
 };
 
 // Effect ids. Server-authoritative unless noted CLIENT (input/render only).
