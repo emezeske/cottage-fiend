@@ -525,6 +525,28 @@ test('presents never land on top of the truck or fridge', () => {
   }
 });
 
+test('dance party makes nearby players dance (stun) but not the initiator', () => {
+  assert.ok(BUFF_POOL.some(e => e.fx === FX.DANCE_PARTY), 'dance party is a buff');
+  assert.ok(ONE_SHOT.has(FX.DANCE_PARTY), 'dance party is a one-shot');
+  const g = newGame();
+  const dj = g.addPlayer('dj');
+  const near = g.addPlayer('near');
+  const far = g.addPlayer('far');
+  g.startRound();
+  advance(g, 3200);
+  const now = g._clock;
+  const d = g.players.get(dj), n = g.players.get(near), f = g.players.get(far);
+  d.x = 800; d.y = 800; n.x = 900; n.y = 800; f.x = 800; f.y = 1400; // near in range, far out
+  g._applyOneShot(d, FX.DANCE_PARTY, now);
+  // DJ: hears the music, NOT stunned/dancing
+  assert.ok(d.dancePartyUntilMs > now, 'dj hears the music');
+  assert.ok(now >= d.stunnedUntilMs && now >= d.danceUntilMs, 'dj is not stunned');
+  // near: dancing + stunned + hears music
+  assert.ok(n.danceUntilMs > now && n.stunnedUntilMs > now && n.dancePartyUntilMs > now, 'near dances');
+  // far: untouched
+  assert.ok(now >= f.danceUntilMs && now >= f.stunnedUntilMs && now >= f.dancePartyUntilMs, 'far unaffected');
+});
+
 test('dominating cue fires once (for the leader) when 5+ points ahead', () => {
   const g = newGame();
   const a = g.addPlayer('alice');

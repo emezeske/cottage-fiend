@@ -491,14 +491,36 @@ function drawDiscs(ctx, state) {
   }
 }
 
+// Disco spotlights shining down on a dancing player — colored beams that sway
+// and cycle hue.
+function drawDanceLights(ctx, x, cy, size, t) {
+  const topY = cy - size * 1.35;     // beams originate above the head
+  const footY = cy + size * 0.5;     // splay out around the feet
+  ctx.save();
+  for (let i = 0; i < 3; i++) {
+    const hue = (t * 0.25 + i * 120) % 360;
+    const spread = (i - 1) * size * 0.6 + Math.sin(t / 240 + i * 2) * size * 0.3;
+    ctx.fillStyle = `hsla(${hue}, 100%, 62%, 0.22)`;
+    ctx.beginPath();
+    ctx.moveTo(x - 5, topY);
+    ctx.lineTo(x + 5, topY);
+    ctx.lineTo(x + spread + size * 0.24, footY);
+    ctx.lineTo(x + spread - size * 0.24, footY);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawPlayer(ctx, p, frame, isSelf) {
   const dir = dir8(p.dir.x, p.dir.y);
   const tnow = performance.now();
   // golden-curd celebration freezes the player too, but it's a buff — show the
   // golden animation (drawGoldenCurds) instead of the debuff stun visuals.
   const golden = isGolden(p.id);
+  const dancing = !!p.dancing; // dance-party: stunned, but rendered dancing under disco lights
   // stunned = rapid frame flicker; otherwise walk only while moving
-  const f = (p.stunned && !golden) ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
+  const f = (p.stunned && !golden && !dancing) ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
   let img;
   if (p.isMallen) img = images[`mallen${p.frenzy ? '_frenzy' : ''}_${dir}_${f}`];
   else img = images[`delivery_${p.spriteIndex}_${dir}_${f}`];
@@ -510,11 +532,16 @@ function drawPlayer(ctx, p, frame, isSelf) {
   const size = p.radius * 3.0;
   let px = p.x;
   const cy = p.y - size * 0.12;
-  if (p.stunned && !golden) px += (Math.random() - 0.5) * 4; // jitter/shake
+  if (p.stunned && !golden && !dancing) px += (Math.random() - 0.5) * 4; // jitter/shake
   if (p.dashing) addDashTrail(p.x, cy, size * 0.42);
 
   if (car) {
     drawSprite(ctx, car, px, p.y, size * 1.9, size * 1.9); // centered on the player
+  } else if (dancing) {
+    drawDanceLights(ctx, px, cy, size, tnow);
+    const bob = Math.abs(Math.sin(tnow / 130)) * size * 0.16;  // bounce up to the beat
+    const sway = Math.sin(tnow / 190) * size * 0.11;           // sway side to side
+    drawSprite(ctx, img, px + sway, cy - bob, size, size);
   } else if (p.stunned && !golden) {
     // A Mallen chomp can stun ~everyone at once, so avoid shadowBlur here (it's a
     // brutal per-sprite mobile GPU cost when many are stunned) — use a cheap
@@ -609,7 +636,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
     ctx.textAlign = 'left';
     ctx.fillText('AD', ax, ay + 6);
     ctx.textAlign = 'center';
-  } else if (p.stunned && !golden) {
+  } else if (p.stunned && !golden && !dancing) {
     ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.fillStyle = '#9fefff';
     ctx.strokeText('💫 STUNNED 💫', p.x, topY - 16);

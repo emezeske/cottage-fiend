@@ -7,7 +7,7 @@
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
   PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
-  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC,
+  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC, DANCE,
 } from './constants.js';
 
 const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SFX
@@ -131,6 +131,8 @@ export class Game {
       noPickupUntilMs: 0,         // auto-pickup suppressed until this clock time (after a forced drop)
       stunnedUntilMs: 0,          // frozen (can't act) until this clock time (Mallen devour shockwave)
       adStunUntilMs: 0,           // frozen specifically by the interstitial-ad debuff (for the above-head icon)
+      danceUntilMs: 0,            // forced to dance (stunned, but rendered dancing) until this clock time
+      dancePartyUntilMs: 0,       // hears the dance-party music until this clock time (initiator + dancers)
       dashUntilMs: 0,             // Mallen lunge active until this clock time
       dashVx: 0, dashVy: 0,       // lunge velocity
     };
@@ -562,6 +564,21 @@ export class Game {
         dir: { x: p.dir.x, y: p.dir.y },
       });
       this.events.push({ type: 'corgiSpawn', x: p.x, y: p.y });
+    } else if (fx === FX.DANCE_PARTY) {
+      // the initiator is unaffected but hears the music; everyone nearby is forced
+      // to dance (a stun, rendered as dancing) and hears the music for the duration
+      const until = now + DANCE.durationMs;
+      p.dancePartyUntilMs = until;
+      for (const o of this.players.values()) {
+        if (o.id === p.id || o.effect === FX.INVINCIBLE) continue;
+        if (dist(p.x, p.y, o.x, o.y) > DANCE.radius) continue;
+        o.stunnedUntilMs = until;
+        o.danceUntilMs = until;
+        o.dancePartyUntilMs = until;
+        o.vx = 0; o.vy = 0;
+        o.charging = false;
+      }
+      this.events.push({ type: 'danceParty', x: p.x, y: p.y });
     }
   }
 
@@ -1020,6 +1037,7 @@ export class Game {
       p.ready = false;
       p.effect = null; p.effectUntilMs = 0; p.cannonArmed = false; p.greaseGrabMs = -1;
       p.noPickupUntilMs = 0; p.stunnedUntilMs = 0; p.adStunUntilMs = 0; p.vx = 0; p.vy = 0;
+      p.danceUntilMs = 0; p.dancePartyUntilMs = 0;
       p.dashUntilMs = 0; p.dashVx = 0; p.dashVy = 0;
     }
     this.phase = PHASE.COUNTDOWN;
@@ -1057,6 +1075,8 @@ export class Game {
         charging: p.charging, frenzy: p.frenzyMs > 0, ready: !!p.ready,
         stunned: (this._clock || 0) < p.stunnedUntilMs,
         adStunned: (this._clock || 0) < p.adStunUntilMs,
+        dancing: (this._clock || 0) < p.danceUntilMs,
+        danceMusic: (this._clock || 0) < p.dancePartyUntilMs,
         dashing: (this._clock || 0) < p.dashUntilMs,
         spriteIndex: p.spriteIndex,
         effect: p.effect,

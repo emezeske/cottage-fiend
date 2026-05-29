@@ -59,6 +59,7 @@ debuffs, and never curd cannon since he can't throw).
 | `sfx_golden_curd.mp3` | instant +1 point with the big celebration |
 | `sfx_corgi_attack.mp3` | spawns a hunter corgi *(placeholder — record this one)* |
 | `sfx_disc_golf.mp3` | periodically flings frisbees that bonk others *(placeholder — record this one)* |
+| `sfx_dance_party.mp3` | the power-up cue when you grab Dance Party *(placeholder — record this one)* |
 
 **Curses (bad):**
 
@@ -88,6 +89,7 @@ These **loop** while active, so they can be longer clips.
 | File | Folder | Plays when… | Who hears it |
 |------|--------|-------------|--------------|
 | `invincible.mp3` | `client/assets/sounds/` | **You** are invincible (the buff is active); stops when it wears off | **Local** — only the invincible player |
+| `sfx_dance_party_theme.mp3` | `client/assets/sounds/` | A **Dance Party** is active (ducks the bg theme) — *currently a STAND-IN (a copy of the score track); replace with real party music* | **Local** — the initiator + everyone dancing |
 | `title.mp3` | `client/assets/music/` | On the **lobby / title** screen | Everyone (each on their own device) |
 | `gameplay.mp3` | `client/assets/music/` | During the **countdown + active round** | Everyone |
 | `score.mp3` | `client/assets/music/` | On the **leaderboard / score** screen | Everyone |

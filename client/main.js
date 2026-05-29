@@ -32,6 +32,7 @@ let reconnectAttempts = 0;
 let state = null;
 let prevPos = {};   // last-snapshot positions per player id, to detect movement
 let invLoopOn = false; // is the local invincibility theme looping
+let danceLoopOn = false; // is the local dance-party theme looping
 const PREVIEW = new URLSearchParams(location.search).get('preview'); // admin screen preview
 
 function hideAudioUnlockModal() {
@@ -157,6 +158,10 @@ function connect(name) {
       const inv = !!(meNow && meNow.effect === 'invincible');
       if (inv && !invLoopOn) { playLoop('invincible_theme', 0.5); duckMusic(true); invLoopOn = true; }
       else if (!inv && invLoopOn) { stopLoop('invincible_theme'); duckMusic(false); invLoopOn = false; }
+      // dance-party music: loops for the initiator + dancers, ducking the bg theme
+      const dance = !!(meNow && meNow.danceMusic);
+      if (dance && !danceLoopOn) { playLoop('dance_party_theme', 0.6); duckMusic(true); danceLoopOn = true; }
+      else if (!dance && danceLoopOn) { stopLoop('dance_party_theme'); duckMusic(false); danceLoopOn = false; }
       // first-curd cue is exclusive with the regular score cue: when the round's
       // first score lands, the scorer hears only the global FIRST CURD sound.
       const firstCurd = (m.events || []).some((e) => e.type === 'firstCurd');

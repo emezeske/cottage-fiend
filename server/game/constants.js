@@ -181,6 +181,14 @@ export const FX = {
   GOLDEN_CURD: 'golden_curd',    // buff: instant +1 point with a big celebration (brief freeze)
   CORGI_ATTACK: 'corgi_attack',  // buff: spawns a corgi that hunts and stuns everyone else
   DISC_GOLF: 'disc_golf',        // buff: periodically flings frisbees that bonk + stun others
+  DANCE_PARTY: 'dance_party',    // buff: nearby players are forced to dance (stunned) while music plays
+};
+
+// Dance-party buff: everyone within radius of the initiator is stunned into dancing
+// for the duration (the initiator is unaffected). They + the initiator hear the music.
+export const DANCE = {
+  radius: 260,
+  durationMs: 6000,
 };
 
 // Disc-golf buff: while active, the player periodically flings a spinning disc in a
@@ -218,6 +226,7 @@ export const BUFF_POOL = [
   { fx: FX.GOLDEN_CURD,  w: 2 },
   { fx: FX.CORGI_ATTACK, w: 2 },
   { fx: FX.DISC_GOLF,    w: 2 },
+  { fx: FX.DANCE_PARTY,  w: 2 },
 ];
 export const DEBUFF_POOL = [
   { fx: FX.HALF_SPEED, w: 3 },
@@ -238,6 +247,6 @@ export const WILDCARD_POOL = [
 export const MALLEN_BUFF_POOL = BUFF_POOL.filter((e) => e.fx !== FX.CURD_CANNON);
 
 // One-shot effects (applied instantly, no active duration).
-export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK]);
+export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK, FX.DANCE_PARTY]);
 // Client-only effects (server still tracks them so the client can read its own).
 export const CLIENT_FX = new Set([FX.BACKWARDS, FX.BLINDNESS]);

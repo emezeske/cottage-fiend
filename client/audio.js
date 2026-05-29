@@ -39,7 +39,9 @@ const SFX_FILES = {
   golden_curd: 'sfx_golden_curd.mp3', // global: golden-curd celebration fanfare
   corgi_attack: 'sfx_corgi_attack.mp3', // local: you grabbed the corgi buff (RECORD ME)
   disc_golf: 'sfx_disc_golf.mp3', // local: you grabbed disc golf (RECORD ME)
+  dance_party: 'sfx_dance_party.mp3', // local: you grabbed dance party (RECORD ME)
   invincible_theme: 'invincible.mp3', // looped locally while you're invincible
+  dance_party_theme: 'sfx_dance_party_theme.mp3', // looped for the initiator + dancers (STAND-IN)
 };
 
 // Looping background music per game screen (crossfaded between).
