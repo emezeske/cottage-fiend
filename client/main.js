@@ -320,20 +320,25 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) suspendAudio(); else resumeAudio();
 });
 
-// render loop
-function loop() {
-  if (!document.hidden) {
-    const p = me();
-    if (charge.active && p) {
-      charge.x = p.x; charge.y = p.y; charge.dir = p.dir;
-      charge.power = chargePower(performance.now() - chargeStartTs);
-    } else if (dragPos && p) {
-      steer();
-    }
-    render(ctx, canvas, state, selfId, charge);
-    paintActionButton();
-  }
+// render loop — capped at ~60fps. Uncapped, this redraws at the display's native
+// rate (120Hz on many phones), which doubled CPU/GPU work, heat, and battery drain
+// for no visible benefit (and made time-based effects run 2x fast on those screens).
+const TARGET_FRAME_MS = 1000 / 60;
+let lastFrameTs = 0;
+function loop(ts = 0) {
   requestAnimationFrame(loop);
+  if (document.hidden) return;
+  if (ts - lastFrameTs < TARGET_FRAME_MS - 1) return; // skip extra frames on hi-refresh screens
+  lastFrameTs = ts;
+  const p = me();
+  if (charge.active && p) {
+    charge.x = p.x; charge.y = p.y; charge.dir = p.dir;
+    charge.power = chargePower(performance.now() - chargeStartTs);
+  } else if (dragPos && p) {
+    steer();
+  }
+  render(ctx, canvas, state, selfId, charge);
+  paintActionButton();
 }
 
 // Preload everything (sprites + all audio bytes) so the first round is smooth.
