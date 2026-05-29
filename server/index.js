@@ -23,7 +23,7 @@ process.on('unhandledRejection', (err) => console.error('unhandledRejection:', e
 // --- static file server for the client ------------------------------------
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
-  '.png': 'image/png', '.json': 'application/json', '.mp3': 'audio/mpeg',
+  '.png': 'image/png', '.webp': 'image/webp', '.json': 'application/json', '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 
