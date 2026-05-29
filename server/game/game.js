@@ -104,13 +104,9 @@ export class Game {
       if (t) { t.state = 'loose'; t.carrierId = null; }
     }
     this.players.delete(id);
-    if (this.mallenId === id) {
-      // promote another mallen-named player if present, else no mallen
-      this.mallenId = null;
-      for (const [pid, pp] of this.players) {
-        if (pp.isMallen) { this.mallenId = pid; break; }
-      }
-    }
+    // Only one player is ever the Mallen, so there's no one to promote — the
+    // round simply runs Mallen-less until someone joins as "mallen".
+    if (this.mallenId === id) this.mallenId = null;
   }
 
   // ---- input handlers (called from network layer) ------------------------
