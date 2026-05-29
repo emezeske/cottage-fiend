@@ -187,8 +187,8 @@ export const FX = {
 // Dance-party buff: everyone within radius of the initiator is stunned into dancing
 // for the duration (the initiator is unaffected). They + the initiator hear the music.
 export const DANCE = {
-  radius: 180,           // a tight dance floor — the host sweeps the aura over people over time
-  durationMs: 6000,      // how long the host's aura (and their music) lasts
+  radius: 230,           // a snug dance floor — the host sweeps the aura over people over time
+  durationMs: 8000,      // how long the host's aura (and their music) lasts
   refreshMs: 350,        // dancers are re-caught each tick; they stop ~this long after leaving the floor
 };
 
