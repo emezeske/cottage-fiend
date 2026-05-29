@@ -129,20 +129,44 @@ function sendAim(x, y) {
   send(MSG.AIM, { x, y });
 }
 
-// Fill the whole screen; render at devicePixelRatio (capped) for crisp pixels.
-// Prefer visualViewport.* over innerWidth/innerHeight because on iPad Safari /
-// Chrome the layout viewport (innerHeight) doesn't update when the URL bar
-// collapses or when a stuck pinch-zoom shrinks the visible area — which left
-// the canvas pinned to the wrong size, with the body color showing below it.
+// Track the visual viewport, not just the layout viewport. On iPad Safari /
+// Chrome a pinch zoom (or any stuck zoom state) sets visualViewport.offsetTop /
+// offsetLeft to non-zero values and shrinks visualViewport.width / .height. CSS
+// `position: fixed; inset: 0` and `bottom: 28px` both anchor to the LAYOUT
+// viewport, which leaves the canvas top cut off and the buttons floating above
+// the visible bottom. Re-positioning canvas + joystick + action button against
+// the visual viewport via JS pins everything to what's actually visible.
+const LAYOUT_MARGIN = 28;
 function fitCanvas() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const vv = window.visualViewport;
-  const w = vv ? vv.width  : window.innerWidth;
-  const h = vv ? vv.height : window.innerHeight;
+  const w = vv ? vv.width       : window.innerWidth;
+  const h = vv ? vv.height      : window.innerHeight;
+  const ox = vv ? vv.offsetLeft : 0;
+  const oy = vv ? vv.offsetTop  : 0;
+
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
-  canvas.style.width = w + 'px';
+  canvas.style.left = ox + 'px';
+  canvas.style.top  = oy + 'px';
+  canvas.style.width  = w + 'px';
   canvas.style.height = h + 'px';
+
+  // joystick (bottom-left) + action button (bottom-right), anchored to the
+  // *visible* viewport's corners rather than the layout viewport's
+  const jw = joystick.offsetWidth  || 110;
+  const jh = joystick.offsetHeight || 110;
+  joystick.style.left = (ox + LAYOUT_MARGIN) + 'px';
+  joystick.style.top  = (oy + h - jh - LAYOUT_MARGIN) + 'px';
+  joystick.style.right = 'auto';
+  joystick.style.bottom = 'auto';
+
+  const aw = actionBtn.offsetWidth  || 116;
+  const ah = actionBtn.offsetHeight || 116;
+  actionBtn.style.left = (ox + w - aw - LAYOUT_MARGIN) + 'px';
+  actionBtn.style.top  = (oy + h - ah - LAYOUT_MARGIN) + 'px';
+  actionBtn.style.right = 'auto';
+  actionBtn.style.bottom = 'auto';
 }
 window.addEventListener('resize', fitCanvas);
 window.addEventListener('orientationchange', fitCanvas);
