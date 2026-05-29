@@ -17,7 +17,9 @@
       height: 100vh;        /* fallback */
       height: 100dvh;       /* iOS dynamic viewport — tracks URL bar collapse */
       overflow: hidden;
-      background: #20301f;
+      /* matches the canvas void color so iOS gesture / safe-area strips at the
+         edges blend in instead of reading as a misaligned green bar */
+      background: #10160f;
       font-family: system-ui, sans-serif;
       touch-action: none;
       user-select: none;

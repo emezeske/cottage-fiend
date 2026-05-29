@@ -133,9 +133,9 @@ function sendAim(x, y) {
 // Chrome a pinch zoom (or any stuck zoom state) sets visualViewport.offsetTop /
 // offsetLeft to non-zero values and shrinks visualViewport.width / .height. CSS
 // `position: fixed; inset: 0` and `bottom: 28px` both anchor to the LAYOUT
-// viewport, which leaves the canvas top cut off and the buttons floating above
-// the visible bottom. Re-positioning canvas + joystick + action button against
-// the visual viewport via JS pins everything to what's actually visible.
+// viewport, which leaves overlays clipped and buttons floating above the
+// visible bottom. Re-positioning every fixed full-screen element against the
+// visual viewport via JS pins everything to what's actually visible.
 const LAYOUT_MARGIN = 28;
 function fitCanvas() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -152,9 +152,21 @@ function fitCanvas() {
   canvas.style.width  = w + 'px';
   canvas.style.height = h + 'px';
 
+  // Full-screen overlays — pin to the visible viewport so the ad badge and
+  // title screen don't get clipped off the top during a stuck zoom.
+  for (const id of ['overlay', 'audioUnlockModal', 'adInterstitial']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.style.left = ox + 'px';
+    el.style.top  = oy + 'px';
+    el.style.width  = w + 'px';
+    el.style.height = h + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+  }
+
   // joystick (bottom-left) + action button (bottom-right), anchored to the
   // *visible* viewport's corners rather than the layout viewport's
-  const jw = joystick.offsetWidth  || 110;
   const jh = joystick.offsetHeight || 110;
   joystick.style.left = (ox + LAYOUT_MARGIN) + 'px';
   joystick.style.top  = (oy + h - jh - LAYOUT_MARGIN) + 'px';
@@ -167,6 +179,14 @@ function fitCanvas() {
   actionBtn.style.top  = (oy + h - ah - LAYOUT_MARGIN) + 'px';
   actionBtn.style.right = 'auto';
   actionBtn.style.bottom = 'auto';
+
+  // LET'S GO button (bottom-center): existing translateX(-50%) does the
+  // centering, we just supply the absolute pixel left/top of its anchor point.
+  const gh = goBtn.offsetHeight || 60;
+  goBtn.style.left = (ox + w / 2) + 'px';
+  goBtn.style.top  = (oy + h - gh - 24) + 'px';
+  goBtn.style.right = 'auto';
+  goBtn.style.bottom = 'auto';
 }
 window.addEventListener('resize', fitCanvas);
 window.addEventListener('orientationchange', fitCanvas);
