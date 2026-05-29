@@ -36,6 +36,8 @@ const SFX_FILES = {
   pinata: 'sfx_pinata.mp3',
   interstitial: 'sfx_interstitial.mp3', // local: forced ad-break debuff jingle
   golden_curd: 'sfx_golden_curd.mp3', // global: golden-curd celebration fanfare
+  corgi_attack: 'sfx_corgi_attack.mp3', // local: you grabbed the corgi buff (RECORD ME)
+  disc_golf: 'sfx_disc_golf.mp3', // local: you grabbed disc golf (RECORD ME)
   invincible_theme: 'invincible.mp3', // looped locally while you're invincible
 };
 
@@ -231,6 +233,10 @@ const PROCEDURAL = {
   throw:  () => { noiseBurst({ dur: 0.25, gain: 0.25, lp: 1200 });
                   tone({ type: 'sawtooth', freq: 300, dur: 0.2, gain: 0.1, slideTo: 120 }); },
   splat:  () => noiseBurst({ dur: 0.18, gain: 0.4, lp: 900 }),
+  discHit: () => { // a frisbee "bonk": a quick impact click + a descending boing
+    noiseBurst({ dur: 0.05, gain: 0.25, lp: 2200 });
+    tone({ type: 'sine', freq: 560, dur: 0.16, gain: 0.28, slideTo: 150 });
+  },
   // score: handled entirely by the local sfx_score.mp3 cue now (see main.js)
   attack: () => tone({ type: 'square', freq: 180, dur: 0.06, gain: 0.18, slideTo: 90 }),
   drop:   () => tone({ type: 'triangle', freq: 220, dur: 0.2, gain: 0.18, slideTo: 80 }),
