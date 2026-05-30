@@ -27,12 +27,11 @@ for (let v = 0; v < PLAYER_VARIANTS; v++)
   for (const d of DIRS)
     for (let f = 0; f < 2; f++)
       MANIFEST[`delivery_${v}_${d}_${f}`] = `delivery_${d}_${f}.webp`;
-// mallen_{dir}_{frame} (normal). The frenzy slot reuses the same art until we
-// have a dedicated frenzy sheet — alias keeps render code unchanged.
+// mallen_{dir}_{frame} (normal) and mallen_frenzy_{dir}_{frame} (frenzy)
 for (const d of DIRS)
   for (let f = 0; f < 2; f++) {
     MANIFEST[`mallen_${d}_${f}`] = `mallen_${d}_${f}.webp`;
-    MANIFEST[`mallen_frenzy_${d}_${f}`] = `mallen_${d}_${f}.webp`;
+    MANIFEST[`mallen_frenzy_${d}_${f}`] = `mallen_frenzy_${d}_${f}.webp`;
   }
 // ferrari_{dir} — shown instead of the crew sprite while they have 2X SPEED
 for (const d of DIRS) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.webp`;
