@@ -121,8 +121,11 @@ export function initAudio() {
 }
 
 // Play a named SFX clip (see SFX_FILES). No-op until loaded.
+// Skipped while the tab is hidden — otherwise src.start() calls queue against
+// the suspended audio clock and all fire at once the moment the user tabs back,
+// producing a wall of stale SFX for things that happened in their absence.
 export function playSound(name, gain = 0.9) {
-  if (!ctx || !sfx[name]) return;
+  if (!ctx || !sfx[name] || document.hidden) return;
   resumeContext();
   playBuffer(sfx[name], gain);
 }
@@ -130,7 +133,7 @@ export function playSound(name, gain = 0.9) {
 // Looping clips (e.g. the invincibility theme). Idempotent start/stop.
 const loops = {}; // name -> { src, g }
 export function playLoop(name, gain = 0.5) {
-  if (!ctx || !sfx[name] || loops[name]) return;
+  if (!ctx || !sfx[name] || loops[name] || document.hidden) return;
   resumeContext();
   const src = ctx.createBufferSource();
   src.buffer = sfx[name]; src.loop = true;
@@ -282,7 +285,7 @@ const PROCEDURAL = {
 };
 
 export function playEvent(type) {
-  if (!ctx) return;
+  if (!ctx || document.hidden) return;
   resumeContext();
   if (buffers[type]) { playBuffer(buffers[type]); return; }
   const fn = PROCEDURAL[type];
