@@ -34,7 +34,6 @@ const mallenColor = document.getElementById('mallenColor');
 const pantsPicker = document.getElementById('pantsPicker');
 const mallenPicker = document.getElementById('mallenPicker');
 const readyBtn = document.getElementById('readyBtn');
-const backBtn = document.getElementById('backBtn');
 
 let ws = null;
 let selfId = null;
@@ -293,20 +292,29 @@ function wsUrl() {
   return `${proto}//${location.host}`;
 }
 
-// Player-chosen colors (set from the customize screen). Persist to localStorage
-// so reload pre-fills the customize pickers + auto-reconnects use the same.
-// Migrate from the older hue-only keys (cf_vest_hue / cf_pants_hue / cf_mallen_hue)
-// in case anyone has them from the previous version.
-function _migrateHue(hueKey, fallbackHex) {
-  const h = Number(localStorage.getItem(hueKey));
-  if (Number.isFinite(h)) return hueToHex(h);
-  return fallbackHex;
+// Player-chosen colors. Persist to localStorage on every picker change so a
+// mid-customize refresh keeps the in-progress look. First-time load (no saved
+// colors) gets random hues so people don't see the same defaults every time.
+// Older cf_*_hue keys auto-migrate to the new cf_*_color hex format.
+function _loadColor(colorKey, hueKey) {
+  const saved = localStorage.getItem(colorKey);
+  if (saved) return saved;
+  const hueStr = localStorage.getItem(hueKey);
+  if (hueStr != null) {
+    const h = Number(hueStr);
+    if (Number.isFinite(h)) return hueToHex(h);
+  }
+  return hueToHex(Math.floor(Math.random() * 360));
 }
 let playerColors = {
-  vest:   localStorage.getItem('cf_vest_color')   || _migrateHue('cf_vest_hue',   '#cd3c34'),
-  pants:  localStorage.getItem('cf_pants_color')  || _migrateHue('cf_pants_hue',  '#3a6ecd'),
-  mallen: localStorage.getItem('cf_mallen_color') || _migrateHue('cf_mallen_hue', '#cd2a2a'),
+  vest:   _loadColor('cf_vest_color',   'cf_vest_hue'),
+  pants:  _loadColor('cf_pants_color',  'cf_pants_hue'),
+  mallen: _loadColor('cf_mallen_color', 'cf_mallen_hue'),
 };
+// persist the seed colors so a refresh before pressing READY keeps the look
+localStorage.setItem('cf_vest_color',   playerColors.vest);
+localStorage.setItem('cf_pants_color',  playerColors.pants);
+localStorage.setItem('cf_mallen_color', playerColors.mallen);
 
 function connect(name) {
   playerName = name;
@@ -645,10 +653,19 @@ function drawPreview() {
     pctx.drawImage(sprite, 0, 0, s, s);
   }
 }
-// live update on every color tweak
-vestColor.addEventListener('input',   drawPreview);
-pantsColor.addEventListener('input',  drawPreview);
-mallenColor.addEventListener('input', drawPreview);
+// live update + persist on every color tweak so a refresh before READY keeps the look
+function _onPickerChange() {
+  playerColors = {
+    vest: vestColor.value, pants: pantsColor.value, mallen: mallenColor.value,
+  };
+  localStorage.setItem('cf_vest_color',   playerColors.vest);
+  localStorage.setItem('cf_pants_color',  playerColors.pants);
+  localStorage.setItem('cf_mallen_color', playerColors.mallen);
+  drawPreview();
+}
+vestColor.addEventListener('input',   _onPickerChange);
+pantsColor.addEventListener('input',  _onPickerChange);
+mallenColor.addEventListener('input', _onPickerChange);
 
 readyBtn.onclick = () => {
   playerColors = {
@@ -660,7 +677,6 @@ readyBtn.onclick = () => {
   hideCustomizeScreen();
   connect(nameInput.value.trim().slice(0, 16));
 };
-backBtn.onclick = () => { hideCustomizeScreen(); overlay.style.display = 'flex'; };
 
 // Audio can't autoplay, so the title theme can't start on its own while the
 // title overlay is showing. Kick it off on the player's first interaction with

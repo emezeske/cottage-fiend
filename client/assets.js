@@ -77,15 +77,16 @@ export function loadAssets() {
 // H~26 S~0.89, blue pants/hat at H~220 S~0.92, and skin sits at the same
 // hue as brown but S~0.10 — so S>=0.40 cleanly excludes skin from the
 // vest replacement.
-const VEST_H_LO = 10,  VEST_H_HI = 45;
-const PANTS_H_LO = 195, PANTS_H_HI = 245;
-// Skin shares the vest's warm hue family (orange-brown) and skin shadows share
-// the hat's cool-blue hue family. The actual cloth regions are very saturated
-// (vest S~0.89, hat S~0.92), while skin tops out around S~0.55 even in tinted
-// highlights. A symmetric S>=0.65 floor cleanly separates cloth from flesh in
-// BOTH bands without touching face / forearms.
+// HONEST limitation: the artist used warm vest brown and skin tones that
+// occupy nearly the same hue family; the forearms can't be cleanly told apart
+// from the vest by color alone. Compromise: narrow hue bands + saturation
+// floor + cap brightness on the vest band so the brightest warm pixels
+// (mostly skin highlights) are left alone. Vest mid-tones still tint.
+const VEST_H_LO = 20,  VEST_H_HI = 42;
+const PANTS_H_LO = 200, PANTS_H_HI = 238;
 const VEST_S_MIN  = 0.65;
-const PANTS_S_MIN = 0.65;
+const PANTS_S_MIN = 0.55;     // pants need a looser floor — bumping it leaves un-tinted edges
+const VEST_V_MAX  = 0.58;     // excludes bright skin highlights; trims the brightest vest spots too
 const TINT_V_MIN  = 0.15;
 
 function rgbToHsv(r, g, b) {
@@ -188,7 +189,7 @@ function recolorDelivery(srcImg, vestHsv, pantsHsv) {
     const [hue, sat, val] = rgbToHsv(d[i], d[i + 1], d[i + 2]);
     if (val < TINT_V_MIN) continue;
     let tH, tS, tRef;
-    if (hue >= VEST_H_LO && hue <= VEST_H_HI && sat >= VEST_S_MIN) {
+    if (hue >= VEST_H_LO && hue <= VEST_H_HI && sat >= VEST_S_MIN && val <= VEST_V_MAX) {
       tH = vH; tS = vS; tRef = vV / REF_V;
     } else if (hue >= PANTS_H_LO && hue <= PANTS_H_HI && sat >= PANTS_S_MIN) {
       tH = pH; tS = pS; tRef = pV / PANTS_REF_V;
