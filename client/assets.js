@@ -82,7 +82,7 @@ export function loadAssets() {
 // saturation (S<=0.06) and very high value (V>=0.79) across every direction,
 // with no skin or cloth pixels intruding. Cool-blue pants are isolated by hue.
 const SHIRT_S_MAX = 0.15;
-const SHIRT_V_MIN = 0.45;     // includes gray shirt shadows (S<=0.15 V 0.45-0.60); cuts off pure outlines
+const SHIRT_V_MIN = 0.40;     // includes darker gray shirt shadows; outlines are still well below 0.40
 const PANTS_H_LO = 200, PANTS_H_HI = 238;
 const PANTS_S_MIN = 0.55;
 const TINT_V_MIN  = 0.15;
