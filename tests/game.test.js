@@ -943,3 +943,185 @@ test('gift deck: forced-present admin override bypasses the deck', () => {
   for (let i = 0; i < 3; i++) g._applyPresent(p, g._clock);
   assert.equal(p._lastFx, FX.MAGNET, 'forced-present overrides the deck');
 });
+
+// ---- Regression tests for the post-review bug fixes -----------------------
+
+test('regression: claiming a new buff clears prior nukeArmed', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  g.setForcedPresent(FX.NUKE);
+  g._applyPresent(p, g._clock);
+  assert.equal(p.nukeArmed, true);
+  // claim a different forced effect — nuke arm must drop
+  g.setForcedPresent(FX.DOUBLE_SPEED);
+  g._applyPresent(p, g._clock);
+  assert.equal(p.nukeArmed, false, 'replacing the buff disarms the nuke');
+});
+
+test('regression: claiming a new buff clears prior cannonArmed', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  g.setForcedPresent(FX.CURD_CANNON);
+  g._applyPresent(p, g._clock);
+  assert.equal(p.cannonArmed, true);
+  g.setForcedPresent(FX.DOUBLE_SPEED);
+  g._applyPresent(p, g._clock);
+  assert.equal(p.cannonArmed, false, 'replacing the buff disarms the cannon');
+});
+
+test('regression: dash override beats stun (nuke can fling stunned victims)', () => {
+  const g = newGame();
+  const id = g.addPlayer('victim');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  const startX = p.x;
+  p.stunnedUntilMs = g._clock + 2000;
+  p.dashUntilMs = g._clock + 800;
+  p.dashVx = 400; p.dashVy = 0;
+  advance(g, 100);
+  assert.ok(g.players.get(id).x > startX + 10, 'dash carried the stunned player forward');
+});
+
+test('regression: portal places at-rest entity outside the destination radius (no ping-pong)', () => {
+  const g = newGame();
+  const id = g.addPlayer('victim');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  g.portals = [
+    { id: 1, pairId: 7, color: 'orange', x: 300,  y: 300,  expiresAt: g._clock + 5000 },
+    { id: 2, pairId: 7, color: 'blue',   x: 1200, y: 1200, expiresAt: g._clock + 5000 },
+  ];
+  p.x = 300; p.y = 300; p.vx = 0; p.vy = 0;
+  p.portalCooldownUntilMs = 0;
+  g._updatePortals(g._clock);
+  // teleported to OUTSIDE the destination portal's radius (with a margin)
+  const d = Math.hypot(p.x - 1200, p.y - 1200);
+  assert.ok(d >= 38 && d <= 80, `expected place just outside portal radius (~50-60), got ${d.toFixed(1)}`);
+});
+
+test('regression: pinata clamps spawned tubs to arena', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  // place at the corner so a 40px radial spawn would otherwise escape
+  p.x = 5; p.y = 5;
+  g._applyOneShot(p, FX.PINATA, g._clock);
+  for (const t of g.tubs.filter(t => t.state === 'loose')) {
+    assert.ok(t.x >= 0 && t.x <= 1600, `tub x ${t.x} outside arena`);
+    assert.ok(t.y >= 0 && t.y <= 1600, `tub y ${t.y} outside arena`);
+  }
+});
+
+test('regression: stunned dance host stops auraing nearby players', () => {
+  const g = newGame();
+  const host = g.addPlayer('host');
+  const victim = g.addPlayer('victim');
+  g.startRound(); advance(g, 3200);
+  const h = g.players.get(host), v = g.players.get(victim);
+  h.x = 800; h.y = 800; v.x = 850; v.y = 800;        // adjacent
+  g._applyOneShot(h, FX.DANCE_PARTY, g._clock);       // host arms
+  advance(g, 50);
+  assert.ok(v.danceUntilMs > g._clock, 'victim was caught initially');
+  h.stunnedUntilMs = g._clock + 1000;                 // stun the host
+  v.danceUntilMs = 0;                                  // reset the dance state
+  advance(g, 50);
+  assert.equal(v.danceUntilMs, 0, 'stunned host stopped pulling new dancers');
+});
+
+test('regression: Mallen with magnet does not rip tubs off the truck', () => {
+  const g = newGame();
+  const mid = g.addPlayer('mallen');
+  g.startRound(); advance(g, 3200);
+  const m = g.players.get(mid);
+  assert.ok(m.isMallen);
+  // put a ready tub near the Mallen
+  const t = g._spawnTub(m.x + 100, m.y, 'ready');
+  const x0 = t.x;
+  m.effect = FX.MAGNET; m.effectUntilMs = g._clock + 6000;
+  advance(g, 200);
+  assert.equal(t.x, x0, 'Mallen magnet should NOT pull the ready tub');
+});
+
+test('regression: giftDeck is re-shuffled fresh each round', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  // drain a few from round 1
+  g._applyPresent(p, g._clock);
+  g._applyPresent(p, g._clock);
+  g._applyPresent(p, g._clock);
+  const remainingR1 = p.giftDeck.length;
+  g.startRound(); advance(g, 100);
+  assert.equal(p.giftDeck, null, 'deck cleared on round start');
+  g._applyPresent(p, g._clock);                       // re-init lazily
+  assert.ok(p.giftDeck.length > remainingR1, 'fresh full deck (minus the one drawn)');
+});
+
+test('regression: setInput rejects NaN / Infinity', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  const before = { x: p.x, y: p.y };
+  g.setInput(id, NaN, 0);
+  g.setInput(id, 0, Infinity);
+  advance(g, 100);
+  assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y), 'position never went NaN');
+  // velocity stayed at 0 since both NaN inputs were rejected
+  assert.equal(Math.hypot(p.x - before.x, p.y - before.y), 0, 'NaN inputs were silently rejected');
+});
+
+test('regression: explosion shove clamps victims to arena bounds', () => {
+  const g = newGame();
+  const claimer = g.addPlayer('a');
+  const victim = g.addPlayer('b');
+  g.startRound(); advance(g, 3200);
+  const c = g.players.get(claimer), v = g.players.get(victim);
+  c.x = 1500; c.y = 1500;          // near top-right corner
+  v.x = 1580; v.y = 1500;
+  g._applyOneShot(c, FX.EXPLOSION, g._clock);
+  assert.ok(v.x <= 1600 - v.radius + 0.001, `victim x clamped, got ${v.x}`);
+  assert.ok(v.y <= 1600 - v.radius + 0.001, `victim y clamped, got ${v.y}`);
+});
+
+// ---- Fuzz: random valid inputs across many ticks must not crash or NaN ----
+
+test('fuzz: 200 ticks of random inputs across 8 players never produces NaN / crash', () => {
+  const g = newGame();
+  const ids = [];
+  for (let i = 0; i < 7; i++) ids.push(g.addPlayer('crew' + i));
+  ids.push(g.addPlayer('mallen'));
+  g.startRound(); advance(g, 3200);
+  const rng = seededRng(11);
+  for (let tick = 0; tick < 200; tick++) {
+    for (const id of ids) {
+      const a = rng() * Math.PI * 2;
+      const r = rng() * 1.2;
+      if (rng() < 0.1) g.setInput(id, NaN, 0);     // garbage in
+      else if (rng() < 0.1) g.setInput(id, Infinity, 1);
+      else g.setInput(id, Math.cos(a) * r, Math.sin(a) * r);
+      if (rng() < 0.05) g.pickup(id, g._clock);
+      if (rng() < 0.05) g.startCharge(id, g._clock);
+      if (rng() < 0.05) g.release(id, g._clock);
+      if (rng() < 0.05) g.punch(id, g._clock);
+      if (rng() < 0.02) g.launchNuke(id, g._clock, rng() * 1600, rng() * 1600);
+      if (rng() < 0.02) g.setAim(id, rng() * 2 - 1, rng() * 2 - 1);
+    }
+    g.tick(33);
+    // invariants
+    for (const p of g.players.values()) {
+      assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y), `player ${p.id} went NaN at tick ${tick}`);
+      assert.ok(p.x >= -10 && p.x <= 1610, `player ${p.id} x out of bounds (${p.x}) at tick ${tick}`);
+      assert.ok(p.y >= -10 && p.y <= 1610, `player ${p.id} y out of bounds (${p.y}) at tick ${tick}`);
+    }
+    for (const t of g.tubs) {
+      assert.ok(Number.isFinite(t.x) && Number.isFinite(t.y), `tub ${t.id} went NaN at tick ${tick}`);
+    }
+  }
+});
