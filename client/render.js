@@ -648,6 +648,20 @@ function drawPlayer(ctx, p, frame, isSelf) {
   // dance lights wash over the host AND every dancer (behind the sprite)
   if (danceParty) drawDanceLights(ctx, px, cy, size, tnow);
 
+  // facing arrow at the feet — drawn BEFORE the sprite so the sprite occludes
+  // the arrow's base (the arrow reads as coming out from under the player).
+  {
+    const col = p.isMallen ? (p.mallenColor || '#cd2a2a') : (p.shirtColor || '#ffffff');
+    ctx.save();
+    ctx.translate(p.x, p.y + p.radius);
+    ctx.rotate(Math.atan2(faceDir.y, faceDir.x));
+    ctx.fillStyle = col; ctx.strokeStyle = '#1e1814'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(19, 0); ctx.lineTo(-8, -9); ctx.lineTo(1, 0); ctx.lineTo(-8, 9); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
   // dance bob/sway is reused by the Mallen face so his head dances with the body
   const danceBob = dancing ? Math.abs(Math.sin(tnow / 130)) * size * 0.16 : 0;
   const danceSway = dancing ? Math.sin(tnow / 190) * size * 0.11 : 0;
@@ -676,19 +690,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
   }
   if (!img) fallbackCircle(ctx, p.x, p.y, p.radius, p.isMallen ? '#a4c' : '#d96');
 
-  // facing arrow at the feet (color-coded) — shows your current punch/throw direction
-  {
-    const col = p.isMallen ? (p.mallenColor || '#cd2a2a') : (p.shirtColor || '#ffffff');
-    ctx.save();
-    ctx.translate(p.x, p.y + p.radius);
-    ctx.rotate(Math.atan2(faceDir.y, faceDir.x));
-    ctx.fillStyle = col; ctx.strokeStyle = '#1e1814'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    // a dart with a notched (concave) back so only the long tip reads as "forward"
-    ctx.moveTo(19, 0); ctx.lineTo(-8, -9); ctx.lineTo(1, 0); ctx.lineTo(-8, 9); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.restore();
-  }
+  // (foot arrow moved up — drawn before the sprite so the sprite sits on top)
 
   // The Mallen's real face, bobblehead-style over the demon's head — fiend face
   // during frenzy, mirrored by facing, with a little bob while walking. When
@@ -976,13 +978,13 @@ function drawHUD(ctx, cssW, cssH, state, selfId) {
   // the same height), showing live positions; clamped so it stays on-screen
   if (state.phase === PHASE.PLAYING || state.phase === PHASE.COUNTDOWN) {
     const mmX = Math.min(bx + bw + 8, cssW - bh - 8);
-    drawMinimap(ctx, mmX, by, bh, state);
+    drawMinimap(ctx, mmX, by, bh, state, selfId);
   }
 }
 
 // A tiny live map: translucent panel with dots for the truck, fridge, players,
 // and the Mallen. World coords are scaled down to the panel.
-function drawMinimap(ctx, x, y, size, state) {
+function drawMinimap(ctx, x, y, size, state, selfId) {
   const arena = state.arena || { width: 1600, height: 1600 };
   const sx = size / arena.width, sy = size / arena.height;
   const mx = (wx) => x + wx * sx;
@@ -1021,6 +1023,22 @@ function drawMinimap(ctx, x, y, size, state) {
   for (const p of state.players || []) {
     if (p.isMallen) dot(p.x, p.y, 3.6, p.mallenColor || '#cd2a2a');
     else halfDot(p.x, p.y, 3, p.shirtColor || '#ffffff', p.pantsColor || '#3a6ecd');
+  }
+  // self indicator: a high-contrast white ring around your dot so you can find
+  // yourself instantly when the map is busy with 10+ players.
+  if (selfId != null) {
+    const me = (state.players || []).find((p) => p.id === selfId);
+    if (me) {
+      const cx = mx(me.x), cy = my(me.y);
+      const tnow = performance.now();
+      const pulse = 5.5 + Math.sin(tnow / 220) * 1.2;
+      ctx.save();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      ctx.beginPath(); ctx.arc(cx, cy, pulse + 1, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(cx, cy, pulse, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 

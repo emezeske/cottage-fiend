@@ -7,6 +7,7 @@
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
   PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
+  BUFF_POOL, WILDCARD_POOL, MALLEN_BUFF_POOL,
   MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC, DANCE, PORTAL, NUKE,
 } from './constants.js';
 
@@ -167,6 +168,8 @@ export class Game {
       dancePartyHostUntilMs: 0,   // you're HOSTING a dance party (a moving aura + your music) until this
       portalCooldownUntilMs: 0,   // brief teleport immunity so portals don't ping-pong you
       nukeArmed: false,           // NUKE buff is currently held — right-stick aims, release commits
+      giftDeck: null,             // per-player shuffled "every gift once" queue; null=uninit, []=drained
+      _lastFx: null,              // last claimed effect id (for SFX dispatch)
       dashUntilMs: 0,             // Mallen lunge active until this clock time
       dashVx: 0, dashVy: 0,       // lunge velocity
     };
@@ -512,7 +515,18 @@ export class Game {
   }
 
   _applyPresent(p, now) {
-    const fx = this.forcedFx || rollEffect(p.isMallen, this.rng);
+    // gift sequencing: each player gets a shuffled "deck" of every gift type
+    // (one of each) drained on their first N pickups. After the deck is empty
+    // they switch to true random (rollEffect) which allows repeats. This
+    // guarantees a new player sees every kind of gift before any repeats.
+    let fx;
+    if (this.forcedFx) {
+      fx = this.forcedFx;
+    } else {
+      if (p.giftDeck == null) p.giftDeck = this._buildGiftDeck(p);
+      if (p.giftDeck.length > 0) fx = p.giftDeck.shift();
+      else fx = rollEffect(p.isMallen, this.rng);
+    }
     p._lastFx = fx;
     if (ONE_SHOT.has(fx)) {
       this._applyOneShot(p, fx, now);
@@ -525,6 +539,20 @@ export class Game {
     if (fx === FX.TINY) p.radius = this._computeRadius(p);
     if (fx === FX.GREASED) p.greaseGrabMs = p.carryingTubId != null ? now : -1;
     if (fx === FX.DISC_GOLF) p.nextDiscAt = now; // start flinging discs right away
+  }
+
+  // Build a per-player "every gift, one of each" deck (shuffled with the game
+  // RNG so test seeds reproduce). Mallen draws from his own buff-only pool;
+  // delivery players get the full set: buffs + debuffs + wildcards.
+  _buildGiftDeck(p) {
+    const pool = p.isMallen
+      ? MALLEN_BUFF_POOL.map((e) => e.fx)
+      : [...BUFF_POOL, ...DEBUFF_POOL, ...WILDCARD_POOL].map((e) => e.fx);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool;
   }
 
   // Disc-golf buff: each holder periodically flings a spinning disc in a random
@@ -997,6 +1025,16 @@ export class Game {
             t.state = 'loose';
             this._scheduleTruckRefill(now);
           }
+        }
+      }
+      // also pull in landed presents within the magnet's range
+      for (const g of this.presents) {
+        if (!g.landed || g._claimed) continue;
+        const d = dist(p.x, p.y, g.x, g.y);
+        if (d > 0 && d < EFFECT.magnetRadius) {
+          const n = { x: (p.x - g.x) / d, y: (p.y - g.y) / d };
+          g.x += n.x * EFFECT.magnetPull * dt;
+          g.y += n.y * EFFECT.magnetPull * dt;
         }
       }
     }
