@@ -1,6 +1,6 @@
 // Main client. Connects to the server, sends input, renders snapshots.
 
-import { loadAssets } from './assets.js';
+import { loadAssets, getDeliverySprite, getMallenSprite, hueToHex, hexToHue } from './assets.js';
 import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
 import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addCurdBurst, addNukeExplosion, AD_H } from './render.js';
 
@@ -25,6 +25,16 @@ const audioUnlockModal = document.getElementById('audioUnlockModal');
 const audioUnlockPlayer = document.getElementById('audioUnlockPlayer');
 const adInterstitial = document.getElementById('adInterstitial');
 const adSkip = document.getElementById('adSkip');
+const customize = document.getElementById('customize');
+const customizeTitle = document.getElementById('customizeTitle');
+const previewCanvas = document.getElementById('previewCanvas');
+const vestColor = document.getElementById('vestColor');
+const pantsColor = document.getElementById('pantsColor');
+const mallenColor = document.getElementById('mallenColor');
+const pantsPicker = document.getElementById('pantsPicker');
+const mallenPicker = document.getElementById('mallenPicker');
+const readyBtn = document.getElementById('readyBtn');
+const backBtn = document.getElementById('backBtn');
 
 let ws = null;
 let selfId = null;
@@ -145,7 +155,7 @@ function sendAim(x, y) {
 //     so fitCanvas takes over and pins canvas + overlays + buttons to
 //     visualViewport's offset/size so they track the visible region.
 const LAYOUT_MARGIN = 28;
-const OVERLAY_IDS = ['overlay', 'audioUnlockModal', 'adInterstitial'];
+const OVERLAY_IDS = ['overlay', 'customize', 'audioUnlockModal', 'adInterstitial'];
 function clearJsPos(el) {
   el.style.left = ''; el.style.top = '';
   el.style.right = ''; el.style.bottom = '';
@@ -283,10 +293,27 @@ function wsUrl() {
   return `${proto}//${location.host}`;
 }
 
+// Player-chosen colors (set from the customize screen). Persist to localStorage
+// so reload pre-fills the customize pickers + auto-reconnects use the same.
+let playerColors = {
+  vestHue:   Number(localStorage.getItem('cf_vest_hue'))   || 0,
+  pantsHue:  Number(localStorage.getItem('cf_pants_hue'))  || 220,
+  mallenHue: Number(localStorage.getItem('cf_mallen_hue')) || 4,
+};
+
 function connect(name) {
   playerName = name;
   ws = new WebSocket(wsUrl());
-  ws.onopen = () => { reconnectAttempts = 0; ws.send(JSON.stringify({ type: MSG.JOIN, name: playerName })); };
+  ws.onopen = () => {
+    reconnectAttempts = 0;
+    ws.send(JSON.stringify({
+      type: MSG.JOIN,
+      name: playerName,
+      vestHue: playerColors.vestHue,
+      pantsHue: playerColors.pantsHue,
+      mallenHue: playerColors.mallenHue,
+    }));
+  };
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     if (m.type === MSG.WELCOME) { selfId = m.id; }
@@ -554,16 +581,80 @@ let assetsLoaded = false;
 function updateJoinEnabled() {
   joinBtn.disabled = !assetsLoaded || nameInput.value.trim() === '';
 }
+// Auto-fill name from prior session if we have one.
+const _savedName = localStorage.getItem('cf_name');
+if (_savedName) nameInput.value = _savedName.slice(0, 16);
+
+// JOIN button: leave the title overlay and go to the customize screen. The
+// READY button on the customize screen does the actual connect/MSG.JOIN.
 joinBtn.onclick = () => {
   const name = nameInput.value.trim().slice(0, 16);
   if (!name) { nameInput.focus(); return; }
   initAudio();
   fitCanvas();
-  overlay.style.display = 'none';
-  connect(name);
+  localStorage.setItem('cf_name', name);
+  showCustomizeScreen(name);
 };
 nameInput.addEventListener('input', updateJoinEnabled);
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.click(); });
+
+// --- character customize screen ---------------------------------------------
+// Single-player preview of the south-facing sprite with live color pickers.
+// "mallen" gets one picker (the demon body color); everyone else gets two
+// (vest + hat/pants). READY commits the colors and connects to the server.
+let _previewFrame = 0;
+let _previewTimer = null;
+let _pendingMallen = false;
+function showCustomizeScreen(name) {
+  overlay.style.display = 'none';
+  customize.style.display = 'flex';
+  customizeTitle.textContent = `${name}, customize your character`;
+  _pendingMallen = name.trim().toLowerCase() === 'mallen';
+  pantsPicker.style.display = _pendingMallen ? 'none' : '';
+  vestColor.parentElement.style.display = _pendingMallen ? 'none' : '';
+  mallenPicker.style.display = _pendingMallen ? '' : 'none';
+  // hydrate pickers from saved hues
+  vestColor.value   = hueToHex(playerColors.vestHue);
+  pantsColor.value  = hueToHex(playerColors.pantsHue);
+  mallenColor.value = hueToHex(playerColors.mallenHue);
+  _previewFrame = 0;
+  drawPreview();
+  if (_previewTimer) clearInterval(_previewTimer);
+  _previewTimer = setInterval(() => { _previewFrame = (_previewFrame + 1) % 2; drawPreview(); }, 320);
+}
+function hideCustomizeScreen() {
+  customize.style.display = 'none';
+  if (_previewTimer) { clearInterval(_previewTimer); _previewTimer = null; }
+}
+function drawPreview() {
+  const pctx = previewCanvas.getContext('2d');
+  pctx.imageSmoothingEnabled = false;
+  pctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  const sprite = _pendingMallen
+    ? getMallenSprite(hexToHue(mallenColor.value), false, 's', _previewFrame)
+    : getDeliverySprite(hexToHue(vestColor.value), hexToHue(pantsColor.value), 's', _previewFrame);
+  if (sprite) {
+    const s = previewCanvas.width;
+    pctx.drawImage(sprite, 0, 0, s, s);
+  }
+}
+// live update on every color tweak
+vestColor.addEventListener('input',   drawPreview);
+pantsColor.addEventListener('input',  drawPreview);
+mallenColor.addEventListener('input', drawPreview);
+
+readyBtn.onclick = () => {
+  const vH = hexToHue(vestColor.value);
+  const pH = hexToHue(pantsColor.value);
+  const mH = hexToHue(mallenColor.value);
+  playerColors = { vestHue: vH, pantsHue: pH, mallenHue: mH };
+  localStorage.setItem('cf_vest_hue',   String(Math.round(vH)));
+  localStorage.setItem('cf_pants_hue',  String(Math.round(pH)));
+  localStorage.setItem('cf_mallen_hue', String(Math.round(mH)));
+  hideCustomizeScreen();
+  connect(nameInput.value.trim().slice(0, 16));
+};
+backBtn.onclick = () => { hideCustomizeScreen(); overlay.style.display = 'flex'; };
 
 // Audio can't autoplay, so the title theme can't start on its own while the
 // title overlay is showing. Kick it off on the player's first interaction with

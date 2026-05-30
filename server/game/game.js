@@ -102,12 +102,17 @@ export class Game {
   }
 
   // ---- lifecycle ----------------------------------------------------------
-  addPlayer(name) {
+  addPlayer(name, colors) {
     const id = _nextId++;
     // Only ONE Mallen: a second person typing "mallen" joins as a normal delivery
     // player (otherwise they'd be a dead-weight character that can't eat/score/win).
     const isMallen = name.trim().toLowerCase() === MALLEN.name && this.mallenId == null;
     const spawn = randSpawn(ARENA, LOCI.edgePadding, this.rng);
+    const norm = (v, fallback) => (typeof v === 'number' && Number.isFinite(v))
+      ? ((v % 360) + 360) % 360 : fallback;
+    const vestHue  = norm(colors && colors.vestHue,  (id * 53) % 360);
+    const pantsHue = norm(colors && colors.pantsHue, (vestHue + 180) % 360);
+    const mallenHue = norm(colors && colors.mallenHue, 4);    // default = source red
     const p = {
       id, name,
       x: spawn.x, y: spawn.y,
@@ -122,12 +127,13 @@ export class Game {
       chargeStartMs: 0,
       aim: null,                  // twin-stick: thrown direction during a charge (else uses .dir)
       hitsTaken: 0,               // toward dropping a tub
+      vestHue, pantsHue, mallenHue,   // player-chosen sprite tints (hues in 0..360)
       // mallen-only:
       eaten: 0,
       frenzyMs: 0,
       lastAttackMs: -1e9,         // "never attacked" (clock 0 is a valid attack time)
       eatingUntilMs: 0,
-      spriteIndex: (id % 12),     // which delivery sprite variant (12 player colors)
+      spriteIndex: (id % 12),     // legacy: still used as a stable seed in a couple places
       // power-up/debuff state:
       effect: null,               // active FX id or null
       effectUntilMs: 0,           // clock time the effect ends
@@ -1381,6 +1387,7 @@ export class Game {
         danceParty: (this._clock || 0) < p.danceUntilMs || (this._clock || 0) < p.dancePartyHostUntilMs,
         dashing: (this._clock || 0) < p.dashUntilMs,
         spriteIndex: p.spriteIndex,
+        vestHue: p.vestHue, pantsHue: p.pantsHue, mallenHue: p.mallenHue,
         effect: p.effect,
         effectMs: p.effect ? Math.max(0, Math.round(p.effectUntilMs - (this._clock || 0))) : 0,
       })),

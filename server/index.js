@@ -130,7 +130,12 @@ wss.on('connection', (ws) => {
       switch (m.type) {
         case MSG.JOIN: {
           const name = (m.name || 'delivery').toString().slice(0, 16);
-          playerId = game.addPlayer(name);
+          const colors = {
+            vestHue:   typeof m.vestHue   === 'number' ? m.vestHue   : null,
+            pantsHue:  typeof m.pantsHue  === 'number' ? m.pantsHue  : null,
+            mallenHue: typeof m.mallenHue === 'number' ? m.mallenHue : null,
+          };
+          playerId = game.addPlayer(name, colors);
           sockets.set(playerId, ws);
           send(ws, MSG.WELCOME, { id: playerId });
           // if we're idling in lobby with players, kick a round when ready

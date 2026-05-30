@@ -2,7 +2,7 @@
 // World is drawn under a (devicePixelRatio * following-camera) transform; HUD and
 // overlays are drawn in CSS-pixel screen space on top.
 
-import { images, PLAYER_COLORS } from './assets.js';
+import { images, PLAYER_COLORS, getDeliverySprite, getMallenSprite, hueToHex } from './assets.js';
 import { computeCamera, getCamera } from './camera.js';
 
 const PHASE = { LOBBY: 'lobby', COUNTDOWN: 'countdown', PLAYING: 'playing', LEADERBOARD: 'leaderboard' };
@@ -469,8 +469,8 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
     // where everyone is: a small color-coded arrow per off-screen player, Mallen in red
     for (const p of players) {
       if (p.id === selfId) continue;
-      if (p.isMallen) edgeArrow(ctx, cssW, cssH, p, '#ff4d6a', '👹', 16);
-      else edgeArrow(ctx, cssW, cssH, p, PLAYER_COLORS[p.spriteIndex % PLAYER_COLORS.length], null, 11);
+      if (p.isMallen) edgeArrow(ctx, cssW, cssH, p, hueToHex(p.mallenHue ?? 4), '👹', 16);
+      else edgeArrow(ctx, cssW, cssH, p, hueToHex(p.vestHue ?? 0), null, 11);
     }
     // bigger nav arrow to your current objective (truck or fridge), so it stands out
     if (loci && self) {
@@ -629,9 +629,11 @@ function drawPlayer(ctx, p, frame, isSelf) {
   const visStun = p.stunned && !golden && !dancing && !p.nukeLaunching;
   // stunned = rapid frame flicker; otherwise walk only while moving
   const f = visStun ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
+  // per-player tinted sprite (on-demand canvas, cached in assets.js). Defaults
+  // cover legacy snapshots that don't yet carry the per-player hues.
   let img;
-  if (p.isMallen) img = images[`mallen${p.frenzy ? '_frenzy' : ''}_${dir}_${f}`];
-  else img = images[`delivery_${p.spriteIndex}_${dir}_${f}`];
+  if (p.isMallen) img = getMallenSprite(p.mallenHue ?? 4, p.frenzy, dir, f);
+  else            img = getDeliverySprite(p.vestHue ?? 0, p.pantsHue ?? 220, dir, f);
   // 2X SPEED turns you into a zooming Ferrari (directional car sprite). The Mallen
   // becomes a car too — but reverts to his normal monster self while in a frenzy.
   const car = (p.effect === 'double_speed' && !(p.isMallen && p.frenzy)) ? images[`ferrari_${carDir}`] : null;
@@ -676,7 +678,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
 
   // facing arrow at the feet (color-coded) — shows your current punch/throw direction
   {
-    const col = p.isMallen ? '#ff4d6a' : PLAYER_COLORS[p.spriteIndex % PLAYER_COLORS.length];
+    const col = p.isMallen ? hueToHex(p.mallenHue ?? 4) : hueToHex(p.vestHue ?? 0);
     ctx.save();
     ctx.translate(p.x, p.y + p.radius);
     ctx.rotate(Math.atan2(faceDir.y, faceDir.x));
@@ -1003,8 +1005,8 @@ function drawMinimap(ctx, x, y, size, state) {
     dot(state.loci.fridge.x, state.loci.fridge.y, 2.8, '#9ad7ff'); // fridge (blue)
   }
   for (const p of state.players || []) {
-    if (p.isMallen) dot(p.x, p.y, 3.6, '#ff4d6a');                 // Mallen (red, medium)
-    else dot(p.x, p.y, 2, PLAYER_COLORS[p.spriteIndex % PLAYER_COLORS.length]); // players (small)
+    if (p.isMallen) dot(p.x, p.y, 3.6, hueToHex(p.mallenHue ?? 4));
+    else dot(p.x, p.y, 2, hueToHex(p.vestHue ?? 0));               // players (small)
   }
 }
 
