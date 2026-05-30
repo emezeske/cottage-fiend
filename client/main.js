@@ -547,8 +547,14 @@ function startNukeAim(e) {
 function onActionDown(e) {
   if (e) e.preventDefault();
   const p = me();
-  if (!p || charge.active || p.stunned) return;
-  if (p.nukeArmed) { startNukeAim(e); return; }   // nuke armed: throw button is the launcher
+  if (!p || p.stunned) return;
+  // If a buff arrived during a held charge (carrying -> nukeArmed), allow the
+  // new press to enter nuke-aim mode instead of being eaten by `charge.active`.
+  if (p.nukeArmed) {
+    if (charge.active) { charge.active = false; charge.aim = null; }
+    startNukeAim(e); return;
+  }
+  if (charge.active) return;
   if (p.carrying) startThrow(e);                  // hold to charge a throw
   else send(MSG.PUNCH);                           // empty-handed (or Mallen): punch
 }
@@ -580,6 +586,11 @@ function onActionMove(e) {
 function onActionUp(e) {
   if (e) e.preventDefault();
   const p = me();
+  // If a charge was somehow still active when we entered nuke-arm mode (race
+  // between the buff arriving on a snapshot and the player still holding the
+  // throw button), clear the local charge state without firing a release —
+  // the server already disarmed our throw on the snapshot transition.
+  if (p && p.nukeArmed && charge.active) { charge.active = false; charge.aim = null; }
   // nuke release: commit the launch if there was a valid aim
   if (p && p.nukeArmed && aimOrigin != null) {
     if (nukeAim) send(MSG.NUKE_LAUNCH, { x: nukeAim.x, y: nukeAim.y });
