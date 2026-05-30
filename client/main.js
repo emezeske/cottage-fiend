@@ -205,7 +205,11 @@ function maxViewportSize() {
 }
 
 function fitCanvas() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // Cap the canvas backing store at 1x device-pixel-ratio. The sprite art is
+  // already pixel-art with `image-rendering: pixelated`, so 1x looks correct
+  // (intentional pixelation, not blurry). On a 3x phone this is ~9x less
+  // rasterization per frame — a major battery win with no visible quality loss.
+  const dpr = Math.min(window.devicePixelRatio || 1, 1);
   const vv = window.visualViewport;
   const zoomed = !!(vv && (vv.scale > 1.02 || vv.offsetTop > 0.5 || vv.offsetLeft > 0.5));
 
@@ -799,10 +803,12 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) suspendAudio(); else resumeAudio();
 });
 
-// render loop — capped at ~60fps. Uncapped, this redraws at the display's native
-// rate (120Hz on many phones), which doubled CPU/GPU work, heat, and battery drain
-// for no visible benefit (and made time-based effects run 2x fast on those screens).
-const TARGET_FRAME_MS = 1000 / 60;
+// Render loop capped at 30 fps. Server simulation runs at 30 Hz, so the client
+// has no new state to draw faster than that anyway. Uncapped the canvas would
+// redraw at the display's native rate (60-120 Hz on phones), burning CPU/GPU
+// + battery for no visible benefit. 30 also matches the snapshot cadence:
+// every paint shows fresh data, no wasted frames in between.
+const TARGET_FRAME_MS = 1000 / 30;
 let lastFrameTs = 0;
 function loop(ts = 0) {
   requestAnimationFrame(loop);
