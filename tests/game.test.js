@@ -1047,20 +1047,24 @@ test('regression: Mallen with magnet does not rip tubs off the truck', () => {
   assert.equal(t.x, x0, 'Mallen magnet should NOT pull the ready tub');
 });
 
-test('regression: giftDeck is re-shuffled fresh each round', () => {
+test('regression: giftDeck persists across rounds (per-session, not per-round)', () => {
   const g = newGame();
   const id = g.addPlayer('alice');
   g.startRound(); advance(g, 3200);
   const p = g.players.get(id);
-  // drain a few from round 1
+  // drain a few in round 1
   g._applyPresent(p, g._clock);
   g._applyPresent(p, g._clock);
   g._applyPresent(p, g._clock);
-  const remainingR1 = p.giftDeck.length;
+  const remainingAfterR1 = p.giftDeck.length;
+  const deckSnapshot = [...p.giftDeck];                // exact order of remaining cards
   g.startRound(); advance(g, 100);
-  assert.equal(p.giftDeck, null, 'deck cleared on round start');
-  g._applyPresent(p, g._clock);                       // re-init lazily
-  assert.ok(p.giftDeck.length > remainingR1, 'fresh full deck (minus the one drawn)');
+  // deck must SURVIVE the round transition — "every gift once" is per-join,
+  // not per-round. A player keeps draining the same shuffled deck until it's
+  // empty, then switches to true-random forever.
+  assert.deepEqual(p.giftDeck, deckSnapshot, 'deck and order preserved across rounds');
+  g._applyPresent(p, g._clock);
+  assert.equal(p.giftDeck.length, remainingAfterR1 - 1, 'next pickup pops the next deck card');
 });
 
 test('regression: setInput rejects NaN / Infinity', () => {

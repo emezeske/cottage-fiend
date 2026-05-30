@@ -1422,7 +1422,10 @@ export class Game {
       p.dashUntilMs = 0; p.dashVx = 0; p.dashVy = 0;
       p.portalCooldownUntilMs = 0;
       p.nukeArmed = false;
-      p.giftDeck = null;                       // fresh "every gift once" deck each round
+      // NOTE: do NOT reset p.giftDeck here — the "every gift once" guarantee
+      // is intentionally per-session (per-join), not per-round. Once a player
+      // has cycled through every gift type, they're in true-random mode for
+      // the rest of their session.
     }
     this.phase = PHASE.COUNTDOWN;
     this.countdownMs = ROUND.startCountdownMs;
