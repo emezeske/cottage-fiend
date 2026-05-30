@@ -702,7 +702,11 @@ function drawPlayer(ctx, p, frame, isSelf) {
       const faceH = size * 0.62;
       const faceW = faceH * (face.width / face.height);
       const walkBob = p.moving ? Math.sin(tnow / 110) * size * 0.05 : 0;
-      const faceDx = 0;            // new Mallen sprite is centered — no x nudge needed
+      // small directional lean: face nudged east/west while side-walking, neutral
+      // when standing still or moving N/S.
+      const faceDx = p.moving
+        ? (dir === 'e' ? size * 0.08 : dir === 'w' ? -size * 0.08 : 0)
+        : 0;
       const faceY = car
         ? (p.y - size * 0.40 + walkBob)    // perched on the Ferrari's cabin
         : (cy - size * 0.32 + walkBob - danceBob);
