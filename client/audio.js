@@ -42,6 +42,8 @@ const SFX_FILES = {
   portal_0: 'sfx_portal_0.mp3',
   portal_1: 'sfx_portal_1.mp3',
   portal_2: 'sfx_portal_2.mp3',
+  // GLOBAL — "nuclear launch detected" plays for everyone the moment a launch commits
+  nuke_launch: 'sfx_nuke_launch.mp3',
   corgi_attack: 'sfx_corgi_attack.mp3', // local: you grabbed the corgi buff (RECORD ME)
   disc_golf: 'sfx_disc_golf.mp3', // local: you grabbed disc golf (RECORD ME)
   // (no dance_party claim SFX — the looping theme covers the moment on its own)

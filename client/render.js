@@ -17,9 +17,9 @@ const EFFECT_LABELS = {
   magnet: '🧲MAGNET', curd_cannon: '🚀CURD CANNON: MEGA THROW',
   half_speed: '🐌HALF SPEED', backwards: '🔄BACKWARDS', greased: '🧈BUTTERFINGERS',
   tiny: '🔬TINY', blindness: '🫥CURD BLIND', banana: '🍌SLIDEY',
-  disc_golf: '🥏DISC GOLF',
+  disc_golf: '🥏DISC GOLF', nuke: '☢NUKE ARMED',
 };
-const BUFF_SET = new Set(['double_speed', 'two_x_points', 'invincible', 'magnet', 'curd_cannon', 'disc_golf']);
+const BUFF_SET = new Set(['double_speed', 'two_x_points', 'invincible', 'magnet', 'curd_cannon', 'disc_golf', 'nuke']);
 
 // transient splatters spawned from events, faded over time
 const splats = [];
@@ -279,7 +279,17 @@ function fallbackCircle(ctx, x, y, r, color) {
   ctx.strokeStyle = '#1e1814'; ctx.lineWidth = 3; ctx.stroke();
 }
 
-export function render(ctx, canvas, state, selfId, charge) {
+// nuke explosions are a local, event-driven animation. main.js calls
+// addNukeExplosion on a 'nukeDetonate' event and we play them back in the
+// world layer over NUKE_EXPLOSION_MS — 3 frames with a fade in/out.
+const NUKE_EXPLOSION_MS = 1800;
+const NUKE_BLAST_RADIUS = 600;                  // matches server NUKE.blastRadius
+const _nukeExplosions = [];
+export function addNukeExplosion(x, y) {
+  _nukeExplosions.push({ x, y, t: performance.now() });
+}
+
+export function render(ctx, canvas, state, selfId, charge, nukeAim) {
   walkClock += 1;
   const cam = computeCamera(canvas, state, selfId);
   const { cssW, cssH } = cam;
@@ -372,6 +382,50 @@ export function render(ctx, canvas, state, selfId, charge) {
 
   drawDiscs(ctx, state);   // flying disc-golf frisbees
 
+  // active nukes — red dot visible to everyone, pulsing brighter as detonation nears
+  if (state.nukes && state.nukes.length) {
+    const tnow = performance.now();
+    for (const n of state.nukes) {
+      const pulse = 0.55 + 0.45 * Math.abs(Math.sin(tnow / 90));
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = '#ff2330';
+      ctx.beginPath(); ctx.arc(n.x, n.y, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#1e0608'; ctx.lineWidth = 3;
+      ctx.stroke();
+      // a faint danger ring for the blast radius
+      ctx.globalAlpha = 0.18 + 0.12 * Math.sin(tnow / 140);
+      ctx.strokeStyle = '#ff2330'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(n.x, n.y, NUKE_BLAST_RADIUS, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  // nuke reticle — local-only, only the player holding the buff sees it while aiming
+  if (nukeAim) {
+    const img = images.nuke_reticle;
+    const size = 110;
+    if (img) drawSprite(ctx, img, nukeAim.x, nukeAim.y, size, size);
+    else { ctx.save(); ctx.strokeStyle = '#ff2330'; ctx.lineWidth = 4;
+           ctx.beginPath(); ctx.arc(nukeAim.x, nukeAim.y, 36, 0, Math.PI * 2); ctx.stroke();
+           ctx.restore(); }
+  }
+  // nuke explosions — 3-frame animation per detonation, with fade in/out
+  for (let i = _nukeExplosions.length - 1; i >= 0; i--) {
+    const ex = _nukeExplosions[i];
+    const age = performance.now() - ex.t;
+    if (age >= NUKE_EXPLOSION_MS) { _nukeExplosions.splice(i, 1); continue; }
+    const t = age / NUKE_EXPLOSION_MS;
+    const frame = Math.min(2, (t * 3) | 0);
+    const fade = Math.min(1, age / 120) * Math.min(1, (NUKE_EXPLOSION_MS - age) / 360);
+    const grow = 0.85 + t * 0.25;
+    const img = images[`nuke_explosion_${frame}`];
+    const size = NUKE_BLAST_RADIUS * 2 * grow;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    if (img) drawSprite(ctx, img, ex.x, ex.y, size, size);
+    else { ctx.fillStyle = '#ffcf6b'; ctx.beginPath(); ctx.arc(ex.x, ex.y, NUKE_BLAST_RADIUS * grow, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
 
 
   for (const g of presents) {

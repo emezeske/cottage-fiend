@@ -151,6 +151,9 @@ wss.on('connection', (ws) => {
         case MSG.RELEASE:
           if (playerId) game.release(playerId, now);
           break;
+        case MSG.NUKE_LAUNCH:
+          if (playerId) game.launchNuke(playerId, now, m.x || 0, m.y || 0);
+          break;
         case MSG.PUNCH:
           if (playerId) game.punch(playerId, now);
           break;

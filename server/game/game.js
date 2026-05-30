@@ -7,7 +7,7 @@
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
   PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
-  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC, DANCE, PORTAL,
+  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC, DANCE, PORTAL, NUKE,
 } from './constants.js';
 
 const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SFX
@@ -55,6 +55,8 @@ export class Game {
     this._discSeq = 1;
     this.portals = [];          // active PORTAL pairs (orange + blue, paired by pairId)
     this._portalSeq = 1;
+    this.activeNukes = [];      // committed nuke launches counting down to detonation
+    this._nukeSeq = 1;
     this._dominating = false;   // has the current 5+ point lead already been announced
   }
 
@@ -137,6 +139,7 @@ export class Game {
       danceUntilMs: 0,            // forced to dance (stunned, rendered dancing) until this clock time
       dancePartyHostUntilMs: 0,   // you're HOSTING a dance party (a moving aura + your music) until this
       portalCooldownUntilMs: 0,   // brief teleport immunity so portals don't ping-pong you
+      nukeArmed: false,           // NUKE buff is currently held — right-stick aims, release commits
       dashUntilMs: 0,             // Mallen lunge active until this clock time
       dashVx: 0, dashVy: 0,       // lunge velocity
     };
@@ -602,7 +605,120 @@ export class Game {
       this._spawnPortalPair(p, now);
       p.portalCooldownUntilMs = Math.max(p.portalCooldownUntilMs, now + PORTAL.teleportCooldownMs);
       this.events.push({ type: 'portal', x: p.x, y: p.y });
+    } else if (fx === FX.NUKE) {
+      // Arm a nuke: the claimer aims via the right joystick (client-only reticle)
+      // and the LAUNCH commits a target. Track the arm via the effect so the HUD
+      // can show it; expires if not launched within NUKE.armDurationMs.
+      p.nukeArmed = true;
+      p.effect = FX.NUKE;
+      p.effectUntilMs = now + NUKE.armDurationMs;
     }
+  }
+
+  // Client commits a nuke launch. Validates state, clamps the target, latches
+  // it into activeNukes for the countdown, freezes the launcher for the duration.
+  launchNuke(id, nowMs, x, y) {
+    const p = this.players.get(id);
+    if (!p || !p.nukeArmed) return;
+    if (nowMs < p.stunnedUntilMs) return;            // can't trigger while stunned
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    // clamp target to the arena (no nuking the void)
+    const tx = this._clamp(x, 0, ARENA.width);
+    const ty = this._clamp(y, 0, ARENA.height);
+    this.activeNukes.push({
+      id: this._nukeSeq++,
+      launcherId: id,
+      x: tx, y: ty,
+      detonateAt: nowMs + NUKE.countdownMs,
+    });
+    // disarm the buff and freeze the launcher for the countdown
+    p.nukeArmed = false;
+    p.effect = null;
+    p.effectUntilMs = 0;
+    p.stunnedUntilMs = Math.max(p.stunnedUntilMs, nowMs + NUKE.countdownMs);
+    p.vx = 0; p.vy = 0;
+    p.charging = false; p.aim = null;
+    // global SFX cue ("nuclear launch detected") + lets clients latch the red dot
+    this.events.push({ type: 'nukeLaunch', x: tx, y: ty, id });
+  }
+
+  _updateNukes(now) {
+    if (!this.activeNukes.length) return;
+    const detonated = [];
+    this.activeNukes = this.activeNukes.filter((n) => {
+      if (now < n.detonateAt) return true;
+      detonated.push(n); return false;
+    });
+    for (const n of detonated) this._applyNukeBlast(n, now);
+  }
+
+  // Blow up at (n.x, n.y): everything inside NUKE.blastRadius gets a randomized
+  // outward shove. Players and their carried tubs get knocked loose; loose /
+  // flying tubs, corgis, and discs all gain outward velocity too.
+  _applyNukeBlast(n, now) {
+    const cx = n.x, cy = n.y;
+    const R = NUKE.blastRadius;
+    const dir = (ox, oy) => {
+      const dx = ox - cx, dy = oy - cy;
+      const m = Math.hypot(dx, dy) || 1;
+      // jitter the angle a little so the cloud reads as chaotic, not a starburst
+      const baseA = Math.atan2(dy, dx);
+      const a = baseA + (this.rng() * 2 - 1) * NUKE.flingAngleNoise;
+      return { x: Math.cos(a), y: Math.sin(a) };
+    };
+    const speedIn = (mn, mx) => mn + this.rng() * (mx - mn);
+
+    for (const p of this.players.values()) {
+      if (p.effect === FX.INVINCIBLE) continue;          // invincible shrugs it off
+      const d = dist(p.x, p.y, cx, cy);
+      if (d > R) continue;
+      // drop carried tub AND send it flying with the blast
+      if (p.carryingTubId != null) {
+        const t = this.tubs.find((t) => t.id === p.carryingTubId);
+        if (t) {
+          const v = dir(t.x, t.y);
+          const sp = speedIn(NUKE.tubFlingMinSpeed, NUKE.tubFlingMaxSpeed);
+          t.state = 'flying'; t.carrierId = null;
+          t.vx = v.x * sp; t.vy = v.y * sp;
+          t.thrownBy = null; t.thrownGraceUntil = 0;
+        }
+        p.carryingTubId = null;
+        p.hitsTaken = 0;
+        p.noPickupUntilMs = now + 600;
+      }
+      // launch the player outward using the dash override (cleanest way to
+      // override their input + carry them through the air for ~a second)
+      const v = dir(p.x, p.y);
+      const sp = speedIn(NUKE.playerFlingMinSpeed, NUKE.playerFlingMaxSpeed);
+      p.dashVx = v.x * sp; p.dashVy = v.y * sp;
+      p.dashUntilMs = Math.max(p.dashUntilMs, now + NUKE.playerFlingMs);
+      p.charging = false; p.aim = null;
+      this.events.push({ type: 'drop', x: p.x, y: p.y });
+    }
+
+    for (const t of this.tubs) {
+      if (t.state === 'carried') continue;                // already handled via carrier above
+      if (dist(t.x, t.y, cx, cy) > R) continue;
+      const v = dir(t.x, t.y);
+      const sp = speedIn(NUKE.tubFlingMinSpeed, NUKE.tubFlingMaxSpeed);
+      t.state = 'flying';
+      t.vx = v.x * sp; t.vy = v.y * sp;
+      t.thrownBy = null; t.thrownGraceUntil = 0;
+    }
+    for (const c of this.corgis) {
+      if (dist(c.x, c.y, cx, cy) > R) continue;
+      const v = dir(c.x, c.y);
+      const sp = speedIn(NUKE.playerFlingMinSpeed, NUKE.playerFlingMaxSpeed);
+      c.vx = v.x * sp; c.vy = v.y * sp;
+    }
+    for (const d of this.discs) {
+      if (dist(d.x, d.y, cx, cy) > R) continue;
+      const v = dir(d.x, d.y);
+      const sp = speedIn(NUKE.tubFlingMinSpeed, NUKE.tubFlingMaxSpeed);
+      d.vx = v.x * sp; d.vy = v.y * sp;
+    }
+
+    this.events.push({ type: 'nukeDetonate', x: cx, y: cy });
   }
 
   // Spawn a matched portal pair: one (color A) about PORTAL.nearOffset px from
@@ -821,6 +937,7 @@ export class Game {
     p.effectUntilMs = 0;
     p.cannonArmed = false;
     if (had === FX.TINY) p.radius = p.isMallen ? MALLEN.radius : PLAYER.radius;
+    if (had === FX.NUKE) p.nukeArmed = false;          // unused nuke just fizzles
   }
 
   _applyMagnets(dt) {
@@ -913,6 +1030,7 @@ export class Game {
       this._updateDiscGolf(dt, now);
       this._updateDanceParty(now);
       this._updatePortals(now);
+      this._updateNukes(now);
       this._checkCarriedDeliveries();
       this._capTubs();
       this._checkDominating();
@@ -1209,6 +1327,7 @@ export class Game {
       p.danceUntilMs = 0; p.dancePartyHostUntilMs = 0;
       p.dashUntilMs = 0; p.dashVx = 0; p.dashVy = 0;
       p.portalCooldownUntilMs = 0;
+      p.nukeArmed = false;
     }
     this.phase = PHASE.COUNTDOWN;
     this.countdownMs = ROUND.startCountdownMs;
@@ -1218,6 +1337,7 @@ export class Game {
     this.corgis = [];
     this.discs = [];
     this.portals = [];
+    this.activeNukes = [];
     this._nextPresentAt = null;
     this._stockTruck();
     this.events.push({ type: 'roundStart', n: this.roundNumber });
@@ -1244,6 +1364,7 @@ export class Game {
         dir: p.dir, isMallen: p.isMallen, radius: Math.round(p.radius),
         score: p.score, eaten: p.eaten, carrying: p.carryingTubId != null,
         charging: p.charging, aim: p.charging ? p.aim : null,
+        nukeArmed: !!p.nukeArmed,
         frenzy: p.frenzyMs > 0, ready: !!p.ready,
         stunned: (this._clock || 0) < p.stunnedUntilMs,
         adStunned: (this._clock || 0) < p.adStunUntilMs,
@@ -1268,6 +1389,10 @@ export class Game {
       portals: this.portals.map(pr => ({
         id: pr.id, x: Math.round(pr.x), y: Math.round(pr.y), color: pr.color,
         msRemaining: Math.max(0, Math.round(pr.expiresAt - (this._clock || 0))),
+      })),
+      nukes: this.activeNukes.map(n => ({
+        id: n.id, x: Math.round(n.x), y: Math.round(n.y),
+        msUntilDetonate: Math.max(0, Math.round(n.detonateAt - (this._clock || 0))),
       })),
     };
   }

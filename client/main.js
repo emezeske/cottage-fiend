@@ -2,11 +2,12 @@
 
 import { loadAssets } from './assets.js';
 import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
-import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addCurdBurst, AD_H } from './render.js';
+import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addCurdBurst, addNukeExplosion, AD_H } from './render.js';
 
 const MSG = {
   JOIN: 'join', INPUT: 'input', PICKUP: 'pickup', CHARGE: 'charge',
-  RELEASE: 'release', AIM: 'aim', PUNCH: 'punch', READY: 'ready', WELCOME: 'welcome', STATE: 'state',
+  RELEASE: 'release', AIM: 'aim', NUKE_LAUNCH: 'nukeLaunch',
+  PUNCH: 'punch', READY: 'ready', WELCOME: 'welcome', STATE: 'state',
 };
 // throw tuning mirrored from server constants for the visual arc only
 const THROW = { minPower: 40, maxPower: 1600, oscillationHz: 1.0 };
@@ -119,6 +120,11 @@ const charge = { active: false, x: 0, y: 0, dir: { x: 1, y: 0 }, aim: null,
 const AIM_DEADZONE = 14;             // px from touchdown before aim kicks in
 let aimOrigin = null;                // { x, y } client px at touchdown
 let aimPid = null;
+// nuke: local-only reticle while the buff is held + the thumb is dragging on the
+// throw button. Server commits on release via MSG.NUKE_LAUNCH (world coords).
+const NUKE_RETICLE_RANGE = 720;      // matches server NUKE.reticleRange (in world units)
+const NUKE_JOY_R = 56;               // px of thumb travel that hits max range
+let nukeAim = null;                  // {x, y} in world coords, or null when not aiming
 let lastAimSent = { x: null, y: null, ts: 0 };
 function sendAim(x, y) {
   const now = performance.now();
@@ -351,6 +357,9 @@ function connect(name) {
         }
         if (e.type === 'presentClaim' && e.id === selfId && e.fx === 'interstitial') showInterstitial();
         if (e.type === 'explosion') addCurdBurst(e.x, e.y); // curds radiate outward in timed rings
+        // nuke: global "launch detected" SFX on commit + a big visual + boom on detonation
+        if (e.type === 'nukeLaunch') playSound('nuke_launch');
+        if (e.type === 'nukeDetonate') { playSound('explosion'); addNukeExplosion(e.x, e.y); }
       }
       updateButtons();
     }
@@ -466,19 +475,40 @@ function endThrow() {
   send(MSG.RELEASE);            // server uses the last-known aim (streamed via MSG.AIM)
   charge.aim = null; aimOrigin = null; aimPid = null;
 }
+function startNukeAim(e) {
+  if (e && e.pointerId != null && actionBtn.setPointerCapture)
+    try { actionBtn.setPointerCapture(e.pointerId); } catch {}
+  aimOrigin = e ? { x: e.clientX, y: e.clientY } : null;
+  aimPid = e ? e.pointerId : null;
+  nukeAim = null;                              // reticle shows once the thumb passes deadzone
+}
 function onActionDown(e) {
   if (e) e.preventDefault();
   const p = me();
   if (!p || charge.active || p.stunned) return;
-  if (p.carrying) startThrow(e);   // hold to charge a throw
-  else send(MSG.PUNCH);            // empty-handed (or Mallen): punch
+  if (p.nukeArmed) { startNukeAim(e); return; }   // nuke armed: throw button is the launcher
+  if (p.carrying) startThrow(e);                  // hold to charge a throw
+  else send(MSG.PUNCH);                           // empty-handed (or Mallen): punch
 }
 function onActionMove(e) {
-  if (!charge.active || aimOrigin == null) return;
+  if (aimOrigin == null) return;
   if (e.pointerId != null && aimPid != null && e.pointerId !== aimPid) return;
+  const p = me();
+  if (!p) return;
   e.preventDefault();
   const dx = e.clientX - aimOrigin.x, dy = e.clientY - aimOrigin.y;
   const len = Math.hypot(dx, dy);
+  // nuke aim: thumb travel maps to world distance from the player along the
+  // thumb's direction (clamped at NUKE_JOY_R == max reticle range).
+  if (p.nukeArmed) {
+    if (len < AIM_DEADZONE) { nukeAim = null; return; }
+    const m = Math.min(1, len / NUKE_JOY_R);
+    const ux = dx / len, uy = dy / len;
+    nukeAim = { x: p.x + ux * m * NUKE_RETICLE_RANGE, y: p.y + uy * m * NUKE_RETICLE_RANGE };
+    return;
+  }
+  // throw aim (existing twin-stick): thumb direction = throw direction
+  if (!charge.active) return;
   if (len < AIM_DEADZONE) {
     if (charge.aim) { charge.aim = null; sendAim(0, 0); }
     return;
@@ -488,6 +518,13 @@ function onActionMove(e) {
 }
 function onActionUp(e) {
   if (e) e.preventDefault();
+  const p = me();
+  // nuke release: commit the launch if there was a valid aim
+  if (p && p.nukeArmed && aimOrigin != null) {
+    if (nukeAim) send(MSG.NUKE_LAUNCH, { x: nukeAim.x, y: nukeAim.y });
+    nukeAim = null; aimOrigin = null; aimPid = null;
+    return;
+  }
   if (charge.active) endThrow();
 }
 actionBtn.addEventListener('pointerdown', onActionDown);
@@ -555,12 +592,14 @@ function updateButtons() {
   if (state.phase === 'playing' && p) {
     actionBtn.style.display = 'block';
     joystick.style.display = 'block';
-    const mode = p.carrying ? 'throw' : (p.isMallen ? 'attack' : 'punch');
+    const mode = p.nukeArmed ? 'nuke'
+               : (p.carrying ? 'throw' : (p.isMallen ? 'attack' : 'punch'));
     if (mode !== lastActionMode) {
       lastActionMode = mode;
-      if (mode === 'throw') { actionBtn.innerHTML = 'HOLD TO<br>THROW'; baseActionColor = '#ffb43d'; }
-      else if (mode === 'attack') { actionBtn.innerHTML = 'ATTACK'; baseActionColor = '#ff6b5d'; }
-      else { actionBtn.innerHTML = 'PUNCH'; baseActionColor = '#ff6b5d'; }
+      if (mode === 'nuke')        { actionBtn.innerHTML = '☢ AIM &<br>RELEASE'; baseActionColor = '#ff2330'; }
+      else if (mode === 'throw')  { actionBtn.innerHTML = 'HOLD TO<br>THROW';   baseActionColor = '#ffb43d'; }
+      else if (mode === 'attack') { actionBtn.innerHTML = 'ATTACK';             baseActionColor = '#ff6b5d'; }
+      else                        { actionBtn.innerHTML = 'PUNCH';              baseActionColor = '#ff6b5d'; }
     }
   } else {
     actionBtn.style.display = 'none';
@@ -606,7 +645,7 @@ function loop(ts = 0) {
     charge.dir = d;
     charge.power = chargePower(performance.now() - chargeStartTs);
   }
-  render(ctx, canvas, state, selfId, charge);
+  render(ctx, canvas, state, selfId, charge, nukeAim);
   paintActionButton();
 }
 

@@ -44,6 +44,9 @@ for (let i = 0; i < 3; i++) {
   MANIFEST[`portal_orange_${i}`] = `portal_orange_${i}.webp`;
   MANIFEST[`portal_blue_${i}`]   = `portal_blue_${i}.webp`;
 }
+// nuke reticle + 3-frame explosion animation
+MANIFEST.nuke_reticle      = 'nuke_reticle.webp';
+for (let i = 0; i < 3; i++) MANIFEST[`nuke_explosion_${i}`] = `nuke_explosion_${i}.webp`;
 
 export const images = {};
 

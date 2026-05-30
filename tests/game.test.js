@@ -595,6 +595,60 @@ test('twin-stick aim: a stun mid-charge cancels the aim too', () => {
   assert.equal(p.aim, null, 'cancelled charge cancels the aim');
 });
 
+test('nuke: claim arms; launch latches a countdown and freezes the launcher', () => {
+  assert.ok(BUFF_POOL.some(e => e.fx === FX.NUKE), 'nuke is a buff');
+  assert.ok(ONE_SHOT.has(FX.NUKE), 'nuke is a one-shot');
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  g._applyOneShot(p, FX.NUKE, g._clock);
+  assert.equal(p.nukeArmed, true, 'armed after claim');
+  assert.equal(p.effect, FX.NUKE, 'HUD shows the buff');
+  // launch at a target
+  const launchClock = g._clock;
+  g.launchNuke(id, launchClock, 800, 800);
+  assert.equal(g.activeNukes.length, 1, 'nuke queued');
+  assert.equal(p.nukeArmed, false, 'disarmed after launch');
+  assert.ok(p.stunnedUntilMs >= launchClock + 2900, 'frozen for the countdown');
+  // countdown elapses -> detonate -> nuke leaves the list
+  advance(g, 3200);
+  assert.equal(g.activeNukes.length, 0, 'detonated and cleaned up');
+});
+
+test('nuke: detonation flings nearby players outward and knocks their tubs loose', () => {
+  const g = newGame();
+  const launcher = g.addPlayer('launcher');
+  const victim = g.addPlayer('victim');
+  const farPlayer = g.addPlayer('farPlayer');
+  g.startRound(); advance(g, 3200);
+  const L = g.players.get(launcher), v = g.players.get(victim), fp = g.players.get(farPlayer);
+  L.x = 200; L.y = 200;
+  v.x = 800; v.y = 800;                 // within blast radius (600) of (820, 820)
+  fp.x = 200; fp.y = 1500;              // far from blast
+  giveTub(g, victim);                   // victim is carrying
+  g._applyOneShot(L, FX.NUKE, g._clock);
+  g.launchNuke(launcher, g._clock, 820, 820);
+  advance(g, 3300);                     // past countdown -> detonate
+  const v2 = g.players.get(victim);
+  assert.equal(v2.carryingTubId, null, 'victim dropped their tub from the blast');
+  assert.ok(v2.dashUntilMs > g._clock, 'victim was flung (dash override active)');
+  const fp2 = g.players.get(farPlayer);
+  assert.equal(fp2.dashUntilMs, 0, 'far player untouched');
+});
+
+test('nuke: launch is rejected while the player is stunned', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  g._applyOneShot(p, FX.NUKE, g._clock);
+  p.stunnedUntilMs = g._clock + 2000;  // stunned by something
+  g.launchNuke(id, g._clock, 800, 800);
+  assert.equal(g.activeNukes.length, 0, 'no nuke queued while stunned');
+  assert.equal(p.nukeArmed, true, 'still armed for later');
+});
+
 test('portal: claiming spawns a paired set (one near, one far, opposite colors)', () => {
   assert.ok(BUFF_POOL.some(e => e.fx === FX.PORTAL), 'portal is a buff');
   assert.ok(ONE_SHOT.has(FX.PORTAL), 'portal is a one-shot');

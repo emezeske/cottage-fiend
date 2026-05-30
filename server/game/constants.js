@@ -127,6 +127,7 @@ export const MSG = {
   CHARGE: 'charge',         // begin charging a throw
   AIM: 'aim',               // twin-stick aim vector during a charge (else throw uses facing dir)
   RELEASE: 'release',       // release throw at current oscillator value
+  NUKE_LAUNCH: 'nukeLaunch',// commit a nuke at world (x,y) — only valid while p.nukeArmed
   PUNCH: 'punch',           // punch button: knock a tub loose / Mallen attack
   READY: 'ready',           // LET'S GO button
   // server -> client
@@ -185,6 +186,27 @@ export const FX = {
   DISC_GOLF: 'disc_golf',        // buff: periodically flings frisbees that bonk + stun others
   DANCE_PARTY: 'dance_party',    // buff: nearby players are forced to dance (stunned) while music plays
   PORTAL: 'portal',              // one-shot buff: spawns a paired portal at the claimer + a random spot
+  NUKE: 'nuke',                  // armed-state buff: aim with right stick, release to launch a 3s nuke
+};
+
+// Nuclear launch buff: claiming arms a nuke. The thrower uses the right joystick
+// (= the throw button) to aim a reticle (local-only). On release, the launch
+// commits — a red dot appears at the target visible to everyone, the launcher
+// is frozen for the countdown, and after countdownMs the bomb detonates,
+// flinging anyone (and any tub) inside blastRadius outward with a randomized
+// physics-y velocity. Tubs being carried get knocked loose by the blast too.
+export const NUKE = {
+  reticleRange: 720,           // max distance from launcher the reticle can land
+  countdownMs: 3000,
+  blastRadius: 600,            // ~3/4 of a visible span
+  playerFlingMinSpeed: 420,    // outward knockback (randomized)
+  playerFlingMaxSpeed: 820,
+  playerFlingMs: 1100,         // how long the launched victims fly
+  tubFlingMinSpeed: 320,
+  tubFlingMaxSpeed: 700,
+  flingAngleNoise: 0.35,       // radians of angle jitter on the outward push (so it looks chaotic)
+  explosionAnimMs: 1800,       // client-side explosion animation duration
+  armDurationMs: 30000,        // the buff expires if you don't launch in this window
 };
 
 // Portal buff: claiming spawns TWO portals (one orange + one blue) at random
@@ -247,6 +269,7 @@ export const BUFF_POOL = [
   { fx: FX.DISC_GOLF,    w: 2 },
   { fx: FX.DANCE_PARTY,  w: 2 },
   { fx: FX.PORTAL,       w: 2 },
+  { fx: FX.NUKE,         w: 2 },
 ];
 export const DEBUFF_POOL = [
   { fx: FX.HALF_SPEED, w: 3 },
@@ -267,6 +290,6 @@ export const WILDCARD_POOL = [
 export const MALLEN_BUFF_POOL = BUFF_POOL.filter((e) => e.fx !== FX.CURD_CANNON);
 
 // One-shot effects (applied instantly, no active duration).
-export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK, FX.DANCE_PARTY, FX.PORTAL]);
+export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK, FX.DANCE_PARTY, FX.PORTAL, FX.NUKE]);
 // Client-only effects (server still tracks them so the client can read its own).
 export const CLIENT_FX = new Set([FX.BACKWARDS, FX.BLINDNESS]);
