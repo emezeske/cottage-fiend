@@ -1,6 +1,9 @@
 // Loads all sprite PNGs and exposes them by key. Returns a promise.
 
-export const DIRS = ['s', 'se', 'e', 'ne', 'n', 'nw', 'w', 'sw'];
+// players + Mallen use 4 cardinal directions (artwork is N/S/W with E mirrored);
+// the corgi and ferrari still have full 8-direction art.
+const DIRS_4 = ['s', 'e', 'n', 'w'];
+const DIRS_8 = ['s', 'se', 'e', 'ne', 'n', 'nw', 'w', 'sw'];
 export const PLAYER_VARIANTS = 12;
 
 const MANIFEST = {
@@ -20,23 +23,23 @@ const MANIFEST = {
   mallen_face: 'mallen_face.webp',          // composited onto the Mallen's head
   mallen_face_fiend: 'mallen_face_fiend.webp', // ...during frenzy
 };
-// delivery_{variant}_{dir}_{frame} — all 12 variants currently share a single
-// set of sprites (no per-player colorization yet). The manifest aliases all
-// variant keys to delivery_{dir}_{frame}.webp so we don't duplicate 192 files.
+// delivery_{variant}_{dir}_{frame} — all 12 variants share one set of sprites
+// for now (no per-player colorization yet); each variant key aliases to the
+// single delivery_{dir}_{frame}.webp file.
 for (let v = 0; v < PLAYER_VARIANTS; v++)
-  for (const d of DIRS)
+  for (const d of DIRS_4)
     for (let f = 0; f < 2; f++)
       MANIFEST[`delivery_${v}_${d}_${f}`] = `delivery_${d}_${f}.webp`;
 // mallen_{dir}_{frame} (normal) and mallen_frenzy_{dir}_{frame} (frenzy)
-for (const d of DIRS)
+for (const d of DIRS_4)
   for (let f = 0; f < 2; f++) {
     MANIFEST[`mallen_${d}_${f}`] = `mallen_${d}_${f}.webp`;
     MANIFEST[`mallen_frenzy_${d}_${f}`] = `mallen_frenzy_${d}_${f}.webp`;
   }
-// ferrari_{dir} — shown instead of the crew sprite while they have 2X SPEED
-for (const d of DIRS) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.webp`;
-// corgi_{dir} — the CORGI_ATTACK hunter
-for (const d of DIRS) MANIFEST[`corgi_${d}`] = `corgi_${d}.webp`;
+// ferrari_{dir} — full 8-direction art, shown during 2X SPEED
+for (const d of DIRS_8) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.webp`;
+// corgi_{dir} — full 8-direction art for the CORGI_ATTACK hunter
+for (const d of DIRS_8) MANIFEST[`corgi_${d}`] = `corgi_${d}.webp`;
 // disc_{0..7} — spin frames for the DISC_GOLF projectiles
 for (let i = 0; i < 8; i++) MANIFEST[`disc_${i}`] = `disc_${i}.webp`;
 // discoball_{0..2} — shimmer frames hovering over dance-party players

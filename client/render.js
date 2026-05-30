@@ -553,6 +553,13 @@ function dir8(dx, dy) {
   const idx = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8;
   return ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne'][idx];
 }
+// 4-direction snap (used by the player + Mallen, whose art is cardinals only).
+// Diagonals collapse to the horizontal cardinal so the sprite always reads as
+// "facing sideways" when not strictly N or S.
+function dir4(dx, dy) {
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'e' : 'w';
+  return dy >= 0 ? 's' : 'n';
+}
 
 // CORGI_ATTACK hunters, facing their travel direction
 function drawCorgis(ctx, state) {
@@ -609,7 +616,8 @@ function drawPlayer(ctx, p, frame, isSelf) {
   // running. BACKWARDS flips the throw, so the sprite faces backward too.
   let faceDir = (p.charging && p.aim) ? p.aim : p.dir;
   if (p.charging && p.effect === 'backwards') faceDir = { x: -faceDir.x, y: -faceDir.y };
-  const dir = dir8(faceDir.x, faceDir.y);
+  const dir = dir4(faceDir.x, faceDir.y);     // delivery + Mallen art (4 cardinals)
+  const carDir = dir8(faceDir.x, faceDir.y);   // ferrari art (still 8 directions)
   const tnow = performance.now();
   // golden-curd celebration freezes the player too, but it's a buff — show the
   // golden animation (drawGoldenCurds) instead of the debuff stun visuals.
@@ -626,7 +634,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
   else img = images[`delivery_${p.spriteIndex}_${dir}_${f}`];
   // 2X SPEED turns you into a zooming Ferrari (directional car sprite). The Mallen
   // becomes a car too — but reverts to his normal monster self while in a frenzy.
-  const car = (p.effect === 'double_speed' && !(p.isMallen && p.frenzy)) ? images[`ferrari_${dir}`] : null;
+  const car = (p.effect === 'double_speed' && !(p.isMallen && p.frenzy)) ? images[`ferrari_${carDir}`] : null;
   // full-body sprites are drawn a bit taller than the collision circle and nudged
   // up so the feet sit near the player position
   const size = p.radius * 3.0;
