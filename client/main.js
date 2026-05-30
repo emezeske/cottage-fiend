@@ -295,10 +295,17 @@ function wsUrl() {
 
 // Player-chosen colors (set from the customize screen). Persist to localStorage
 // so reload pre-fills the customize pickers + auto-reconnects use the same.
+// Migrate from the older hue-only keys (cf_vest_hue / cf_pants_hue / cf_mallen_hue)
+// in case anyone has them from the previous version.
+function _migrateHue(hueKey, fallbackHex) {
+  const h = Number(localStorage.getItem(hueKey));
+  if (Number.isFinite(h)) return hueToHex(h);
+  return fallbackHex;
+}
 let playerColors = {
-  vestHue:   Number(localStorage.getItem('cf_vest_hue'))   || 0,
-  pantsHue:  Number(localStorage.getItem('cf_pants_hue'))  || 220,
-  mallenHue: Number(localStorage.getItem('cf_mallen_hue')) || 4,
+  vest:   localStorage.getItem('cf_vest_color')   || _migrateHue('cf_vest_hue',   '#cd3c34'),
+  pants:  localStorage.getItem('cf_pants_color')  || _migrateHue('cf_pants_hue',  '#3a6ecd'),
+  mallen: localStorage.getItem('cf_mallen_color') || _migrateHue('cf_mallen_hue', '#cd2a2a'),
 };
 
 function connect(name) {
@@ -309,9 +316,9 @@ function connect(name) {
     ws.send(JSON.stringify({
       type: MSG.JOIN,
       name: playerName,
-      vestHue: playerColors.vestHue,
-      pantsHue: playerColors.pantsHue,
-      mallenHue: playerColors.mallenHue,
+      vestColor:   playerColors.vest,
+      pantsColor:  playerColors.pants,
+      mallenColor: playerColors.mallen,
     }));
   };
   ws.onmessage = (ev) => {
@@ -613,10 +620,10 @@ function showCustomizeScreen(name) {
   pantsPicker.style.display = _pendingMallen ? 'none' : '';
   vestColor.parentElement.style.display = _pendingMallen ? 'none' : '';
   mallenPicker.style.display = _pendingMallen ? '' : 'none';
-  // hydrate pickers from saved hues
-  vestColor.value   = hueToHex(playerColors.vestHue);
-  pantsColor.value  = hueToHex(playerColors.pantsHue);
-  mallenColor.value = hueToHex(playerColors.mallenHue);
+  // hydrate pickers from saved hex
+  vestColor.value   = playerColors.vest;
+  pantsColor.value  = playerColors.pants;
+  mallenColor.value = playerColors.mallen;
   _previewFrame = 0;
   drawPreview();
   if (_previewTimer) clearInterval(_previewTimer);
@@ -631,8 +638,8 @@ function drawPreview() {
   pctx.imageSmoothingEnabled = false;
   pctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
   const sprite = _pendingMallen
-    ? getMallenSprite(hexToHue(mallenColor.value), false, 's', _previewFrame)
-    : getDeliverySprite(hexToHue(vestColor.value), hexToHue(pantsColor.value), 's', _previewFrame);
+    ? getMallenSprite(mallenColor.value, false, 's', _previewFrame)
+    : getDeliverySprite(vestColor.value, pantsColor.value, 's', _previewFrame);
   if (sprite) {
     const s = previewCanvas.width;
     pctx.drawImage(sprite, 0, 0, s, s);
@@ -644,13 +651,12 @@ pantsColor.addEventListener('input',  drawPreview);
 mallenColor.addEventListener('input', drawPreview);
 
 readyBtn.onclick = () => {
-  const vH = hexToHue(vestColor.value);
-  const pH = hexToHue(pantsColor.value);
-  const mH = hexToHue(mallenColor.value);
-  playerColors = { vestHue: vH, pantsHue: pH, mallenHue: mH };
-  localStorage.setItem('cf_vest_hue',   String(Math.round(vH)));
-  localStorage.setItem('cf_pants_hue',  String(Math.round(pH)));
-  localStorage.setItem('cf_mallen_hue', String(Math.round(mH)));
+  playerColors = {
+    vest: vestColor.value, pants: pantsColor.value, mallen: mallenColor.value,
+  };
+  localStorage.setItem('cf_vest_color',   playerColors.vest);
+  localStorage.setItem('cf_pants_color',  playerColors.pants);
+  localStorage.setItem('cf_mallen_color', playerColors.mallen);
   hideCustomizeScreen();
   connect(nameInput.value.trim().slice(0, 16));
 };

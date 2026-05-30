@@ -131,9 +131,9 @@ wss.on('connection', (ws) => {
         case MSG.JOIN: {
           const name = (m.name || 'delivery').toString().slice(0, 16);
           const colors = {
-            vestHue:   typeof m.vestHue   === 'number' ? m.vestHue   : null,
-            pantsHue:  typeof m.pantsHue  === 'number' ? m.pantsHue  : null,
-            mallenHue: typeof m.mallenHue === 'number' ? m.mallenHue : null,
+            vest:   typeof m.vestColor   === 'string' ? m.vestColor   : null,
+            pants:  typeof m.pantsColor  === 'string' ? m.pantsColor  : null,
+            mallen: typeof m.mallenColor === 'string' ? m.mallenColor : null,
           };
           playerId = game.addPlayer(name, colors);
           sockets.set(playerId, ws);

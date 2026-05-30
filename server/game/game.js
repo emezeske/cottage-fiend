@@ -19,6 +19,23 @@ import { rollEffect } from './effects.js';
 let _nextId = 1;
 export function _resetIds() { _nextId = 1; } // test helper
 
+// Default-color helper: a stable, distinct hue per-id when the client doesn't
+// send vest/pants/mallen colors (back-compat for older clients + tests).
+function _hsvDefault(hueDeg) {
+  const h = ((hueDeg % 360) + 360) % 360;
+  const s = 0.78, v = 0.85;
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  let r, g, b;
+  if      (h < 60)  { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else              { r = c; g = 0; b = x; }
+  const hx = (n) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
+  return `#${hx(r)}${hx(g)}${hx(b)}`;
+}
+
 // shortest distance from point (px,py) to the segment (ax,ay)-(bx,by)
 function segDist(px, py, ax, ay, bx, by) {
   const abx = bx - ax, aby = by - ay;
@@ -108,11 +125,15 @@ export class Game {
     // player (otherwise they'd be a dead-weight character that can't eat/score/win).
     const isMallen = name.trim().toLowerCase() === MALLEN.name && this.mallenId == null;
     const spawn = randSpawn(ARENA, LOCI.edgePadding, this.rng);
-    const norm = (v, fallback) => (typeof v === 'number' && Number.isFinite(v))
-      ? ((v % 360) + 360) % 360 : fallback;
-    const vestHue  = norm(colors && colors.vestHue,  (id * 53) % 360);
-    const pantsHue = norm(colors && colors.pantsHue, (vestHue + 180) % 360);
-    const mallenHue = norm(colors && colors.mallenHue, 4);    // default = source red
+    // Player-picked colors come in as hex strings. Validate the format and fall
+    // back to a stable seed per id so back-compat / missing-payload clients
+    // still get reasonable distinct visuals.
+    const isHex = (s) => typeof s === 'string' && /^#[0-9a-fA-F]{6}$/.test(s);
+    const normHex = (h, fallback) => (isHex(h) ? h.toLowerCase() : fallback);
+    const defH = (id * 53) % 360;
+    const vestColor   = normHex(colors && colors.vest,   _hsvDefault(defH));
+    const pantsColor  = normHex(colors && colors.pants,  _hsvDefault((defH + 180) % 360));
+    const mallenColor = normHex(colors && colors.mallen, '#cd2a2a');
     const p = {
       id, name,
       x: spawn.x, y: spawn.y,
@@ -127,7 +148,7 @@ export class Game {
       chargeStartMs: 0,
       aim: null,                  // twin-stick: thrown direction during a charge (else uses .dir)
       hitsTaken: 0,               // toward dropping a tub
-      vestHue, pantsHue, mallenHue,   // player-chosen sprite tints (hues in 0..360)
+      vestColor, pantsColor, mallenColor,  // player-chosen sprite tints (hex #RRGGBB)
       // mallen-only:
       eaten: 0,
       frenzyMs: 0,
@@ -1387,7 +1408,7 @@ export class Game {
         danceParty: (this._clock || 0) < p.danceUntilMs || (this._clock || 0) < p.dancePartyHostUntilMs,
         dashing: (this._clock || 0) < p.dashUntilMs,
         spriteIndex: p.spriteIndex,
-        vestHue: p.vestHue, pantsHue: p.pantsHue, mallenHue: p.mallenHue,
+        vestColor: p.vestColor, pantsColor: p.pantsColor, mallenColor: p.mallenColor,
         effect: p.effect,
         effectMs: p.effect ? Math.max(0, Math.round(p.effectUntilMs - (this._clock || 0))) : 0,
       })),

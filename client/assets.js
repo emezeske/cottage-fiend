@@ -127,19 +127,22 @@ export function hexToHue(hex) {
   return rgbToHsv(r, g, b)[0];
 }
 
-// per-(vestHue, pantsHue, dir, frame) tinted canvas, cached on first request.
-// Each unique player color combo costs 4*2 = 8 small canvases (~5 MB total at
-// 12 players); the cache is global so reuse is automatic.
+// Recolor uses the FULL target color (hue + sat + value), so picking dark red
+// vs bright red vs pink in the picker actually gives you different vests.
+// Source brightness variation is preserved as a scale relative to the band's
+// reference V so highlights / shadows survive the swap.
+const REF_V = 0.55;                      // ~midpoint of source vest V; pants slightly darker
+const PANTS_REF_V = 0.40;
+
 const _spriteCache = new Map();
-export function getDeliverySprite(vestHue, pantsHue, dir, frame) {
-  const vH = Math.round(((vestHue % 360) + 360) % 360);
-  const pH = Math.round(((pantsHue % 360) + 360) % 360);
-  const key = `${vH}|${pH}|${dir}|${frame}`;
+export function getDeliverySprite(vestHex, pantsHex, dir, frame) {
+  const v = normalizeHex(vestHex), p = normalizeHex(pantsHex);
+  const key = `${v}|${p}|${dir}|${frame}`;
   let canvas = _spriteCache.get(key);
   if (canvas) return canvas;
   const src = images[`delivery_${dir}_${frame}`];
   if (!src) return null;
-  canvas = recolorSprite(src, vH, pH);
+  canvas = recolorDelivery(src, hexToHsv(v), hexToHsv(p));
   _spriteCache.set(key, canvas);
   return canvas;
 }
@@ -147,18 +150,29 @@ export function getDeliverySprite(vestHue, pantsHue, dir, frame) {
 // Mallen body is dominantly red (H~4 S~0.95) with frenzy adding pink/purple
 // at H~280. Tint everything in the warm-arc so frenzy shifts with the body.
 const _mallenCache = new Map();
-export function getMallenSprite(mallenHue, frenzy, dir, frame) {
-  const mH = Math.round(((mallenHue % 360) + 360) % 360);
-  const key = `${mH}|${frenzy ? 1 : 0}|${dir}|${frame}`;
+export function getMallenSprite(mallenHex, frenzy, dir, frame) {
+  const m = normalizeHex(mallenHex);
+  const key = `${m}|${frenzy ? 1 : 0}|${dir}|${frame}`;
   let canvas = _mallenCache.get(key);
   if (canvas) return canvas;
   const src = images[`mallen${frenzy ? '_frenzy' : ''}_${dir}_${frame}`];
   if (!src) return null;
-  canvas = recolorMallen(src, mH);
+  canvas = recolorMallen(src, hexToHsv(m));
   _mallenCache.set(key, canvas);
   return canvas;
 }
-function recolorMallen(srcImg, targetH) {
+
+function normalizeHex(hex) {
+  return typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex) ? hex.toLowerCase() : '#cd3c34';
+}
+function hexToHsv(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return rgbToHsv(r, g, b);
+}
+
+function recolorDelivery(srcImg, vestHsv, pantsHsv) {
   const w = srcImg.naturalWidth || srcImg.width;
   const h = srcImg.naturalHeight || srcImg.height;
   const c = document.createElement('canvas');
@@ -167,25 +181,29 @@ function recolorMallen(srcImg, targetH) {
   ctx.drawImage(srcImg, 0, 0);
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
-  // Source body is at H~0-5. Compute the offset from the source-mean hue and
-  // shift the whole warm arc by the same amount, so frenzy's purple stays
-  // distinct from the body color even after the swap.
-  const SOURCE_BODY_H = 4;                    // dominant Mallen red
-  const offset = ((targetH - SOURCE_BODY_H) + 360) % 360;
+  const [vH, vS, vV] = vestHsv;
+  const [pH, pS, pV] = pantsHsv;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] < 16) continue;
     const [hue, sat, val] = rgbToHsv(d[i], d[i + 1], d[i + 2]);
-    if (val < 0.15 || sat < 0.45) continue;             // outline / desaturated detail — leave alone
-    if (hue >= 60 && hue <= 240) continue;              // skip cool accents (eyes, etc.)
-    const newH = (hue + offset) % 360;
-    const [r, g, b] = hsvToRgb(newH, sat, val);
+    if (val < TINT_V_MIN) continue;
+    let tH, tS, tRef;
+    if (hue >= VEST_H_LO && hue <= VEST_H_HI && sat >= VEST_S_MIN) {
+      tH = vH; tS = vS; tRef = vV / REF_V;
+    } else if (hue >= PANTS_H_LO && hue <= PANTS_H_HI && sat >= PANTS_S_MIN) {
+      tH = pH; tS = pS; tRef = pV / PANTS_REF_V;
+    } else continue;
+    // newV scales source V by (targetV / refV) — picker's brightness governs
+    // the overall lightness of the band while source shading variation is kept.
+    const newV = Math.min(1, Math.max(0, val * tRef));
+    const [r, g, b] = hsvToRgb(tH, tS, newV);
     d[i] = r; d[i + 1] = g; d[i + 2] = b;
   }
   ctx.putImageData(img, 0, 0);
   return c;
 }
 
-function recolorSprite(srcImg, vestH, pantsH) {
+function recolorMallen(srcImg, targetHsv) {
   const w = srcImg.naturalWidth || srcImg.width;
   const h = srcImg.naturalHeight || srcImg.height;
   const c = document.createElement('canvas');
@@ -194,16 +212,24 @@ function recolorSprite(srcImg, vestH, pantsH) {
   ctx.drawImage(srcImg, 0, 0);
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
+  const [tH, tS, tV] = targetHsv;
+  // Body is at H~4. Shift hue by (target - 4) so the frenzy purple keeps its
+  // distance from the body color even after the swap.
+  const SOURCE_BODY_H = 4;
+  const offset = ((tH - SOURCE_BODY_H) + 360) % 360;
+  const tRef = tV / REF_V;
   for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] < 16) continue;                                 // transparent
+    if (d[i + 3] < 16) continue;
     const [hue, sat, val] = rgbToHsv(d[i], d[i + 1], d[i + 2]);
-    if (val < TINT_V_MIN) continue;                              // outlines / shadows
-    let targetH = null;
-    if (hue >= VEST_H_LO && hue <= VEST_H_HI && sat >= VEST_S_MIN) targetH = vestH;
-    else if (hue >= PANTS_H_LO && hue <= PANTS_H_HI && sat >= PANTS_S_MIN) targetH = pantsH;
-    if (targetH === null) continue;
-    // preserve the source's saturation + value (the shading) but swap the hue
-    const [r, g, b] = hsvToRgb(targetH, Math.max(sat, 0.65), val);
+    if (val < 0.15 || sat < 0.45) continue;             // outline / detail
+    if (hue >= 60 && hue <= 240) continue;              // cool accents (eyes etc.) — leave
+    const newH = (hue + offset) % 360;
+    // blend in target sat: take the larger of source-sat and target-sat so a
+    // fully-saturated target lifts mid-sat source areas, while desaturated
+    // targets still bring everything down toward gray.
+    const newS = Math.min(1, Math.max(sat * 0.5 + tS * 0.5, 0));
+    const newV = Math.min(1, Math.max(0, val * tRef));
+    const [r, g, b] = hsvToRgb(newH, newS, newV);
     d[i] = r; d[i + 1] = g; d[i + 2] = b;
   }
   ctx.putImageData(img, 0, 0);
