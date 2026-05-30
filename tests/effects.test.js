@@ -30,7 +30,8 @@ test('weightedPick always returns a member of the pool', () => {
 });
 
 test('mallen rolls from buffs + debuffs + wildcards, skipping ones with no effect', () => {
-  // never the throw-only or carry-only effects — those visibly do nothing on him.
+  // never throw-only or carry-only effects, and never PINATA (way too lopsided
+  // since dropped loose tubs at his feet are instant easy eats).
   let sawDebuff = false, sawWild = false;
   const debuffs = new Set(DEBUFF_POOL.map(e => e.fx));
   const wilds = new Set(WILDCARD_POOL.map(e => e.fx));
@@ -38,11 +39,12 @@ test('mallen rolls from buffs + debuffs + wildcards, skipping ones with no effec
     const fx = rollEffect(true, seededRng(seed));
     assert.notEqual(fx, FX.CURD_CANNON, `mallen got throw-only curd cannon at seed ${seed}`);
     assert.notEqual(fx, FX.GREASED,     `mallen got carry-only greased at seed ${seed}`);
+    assert.notEqual(fx, FX.PINATA,      `mallen got piñata (instant easy eats) at seed ${seed}`);
     if (debuffs.has(fx)) sawDebuff = true;
     if (wilds.has(fx)) sawWild = true;
   }
   assert.ok(sawDebuff, 'mallen should occasionally roll a debuff');
-  assert.ok(sawWild,   'mallen should occasionally roll a wildcard');
+  assert.ok(sawWild,   'mallen should occasionally roll a wildcard (the non-piñata kind)');
 });
 
 test('delivery players can roll debuffs and wildcards', () => {

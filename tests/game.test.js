@@ -937,7 +937,7 @@ test('gift deck: Mallen draws from his own buff + debuff + wildcard pools, uniqu
   assert.equal(seen.size, expected.size, 'Mallen saw every eligible gift before any repeat');
 });
 
-test('gift deck: Mallen never rolls effects he can\'t actually use (greased, curd cannon)', () => {
+test('gift deck: Mallen never rolls effects he can\'t actually use (greased, curd cannon, piñata)', () => {
   const g = newGame();
   g.addPlayer('crew');
   const mid = g.addPlayer('mallen');
@@ -947,6 +947,7 @@ test('gift deck: Mallen never rolls effects he can\'t actually use (greased, cur
   const deck = g._buildGiftDeck(m);
   assert.ok(!deck.includes(FX.GREASED),     'GREASED excluded — Mallen has no carry');
   assert.ok(!deck.includes(FX.CURD_CANNON), 'CURD_CANNON excluded — Mallen has no throw');
+  assert.ok(!deck.includes(FX.PINATA),      'PINATA excluded — instant +3 eats for Mallen');
 });
 
 test('gift deck: forced-present admin override bypasses the deck', () => {
