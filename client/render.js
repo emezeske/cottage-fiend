@@ -702,7 +702,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
       const faceH = size * 0.62;
       const faceW = faceH * (face.width / face.height);
       const walkBob = p.moving ? Math.sin(tnow / 110) * size * 0.05 : 0;
-      const faceDx = size * 0.12;  // face sits left of center; nudge it right
+      const faceDx = 0;            // new Mallen sprite is centered — no x nudge needed
       const faceY = car
         ? (p.y - size * 0.40 + walkBob)    // perched on the Ferrari's cabin
         : (cy - size * 0.32 + walkBob - danceBob);
