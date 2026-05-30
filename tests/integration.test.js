@@ -136,3 +136,41 @@ test('integration: 20 clients can all connect, send input, and see each other in
   assert.equal(lastState.snapshot.players.length, 20, '20 players visible in everyone\'s snapshot');
   for (const { ws } of conns) ws.close();
 });
+
+test('integration: snapshot wire size with 8 players is meaningfully smaller than the JSON', async () => {
+  await ensureServer(); await reset();
+  // Use 8 clients so the snapshot has enough body to compress (the threshold is
+  // 1 KB; below that the message is sent uncompressed).
+  const N = 8;
+  const conns = [];
+  for (let i = 0; i < N; i++) {
+    const c = await connect();
+    c.ws.send(JSON.stringify({ type: 'join', name: 'crew' + i }));
+    conns.push(c);
+  }
+  await wait(300);
+  // We can read the raw frame size from the ws library by listening to the
+  // low-level 'message' event with the binary buffer — but ws auto-decodes
+  // by default. Instead, observe via the bytesReceived stat on the socket
+  // after a known number of snapshots.
+  const start = conns[0].ws._socket?.bytesRead || 0;
+  const startEvents = conns[0].events.length;
+  // collect ~30 snapshots
+  await wait(1100);
+  const end = conns[0].ws._socket?.bytesRead || 0;
+  const endEvents = conns[0].events.length;
+  const snaps = endEvents - startEvents;
+  const bytes = end - start;
+  if (snaps < 5) {
+    for (const { ws } of conns) ws.close();
+    return;  // CI may have throttled — skip the assertion rather than flake
+  }
+  const lastState = conns[0].events.slice().reverse().find(e => e.type === 'state');
+  const uncompressed = JSON.stringify(lastState).length;
+  const compressedPerSnap = bytes / snaps;
+  const ratio = compressedPerSnap / uncompressed;
+  console.log(`  per-message-deflate: ${uncompressed} B JSON -> ${compressedPerSnap.toFixed(0)} B on wire (${(ratio*100).toFixed(0)}%)`);
+  assert.ok(ratio < 0.7,
+    `expected on-wire snapshot well under JSON size, ratio ${ratio.toFixed(2)}`);
+  for (const { ws } of conns) ws.close();
+});

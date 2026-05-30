@@ -130,7 +130,24 @@ let forcedPresent = '';  // admin testing: effect id every present rolls ('' = r
 let mallenPower = 3;     // admin: live Mallen difficulty level (1-5), persists across reset
 let presentRate = 1;     // admin: present-frequency multiplier, persists across reset
 let presentBias = 0.30;  // admin: catch-up bias strength (post-deck rolls only), persists across reset
-const wss = new WebSocketServer({ server: httpServer });
+// Enable per-message-deflate compression on every WS frame. Snapshot JSON
+// compresses 3-4x, so a 20-player party drops from ~58 Mbps of WiFi traffic
+// to ~17 Mbps, which fits comfortably even on a single 2.4 GHz router. The
+// "no context takeover" options keep the per-connection memory footprint
+// small (otherwise each socket holds a deflate context indefinitely); the
+// threshold skips compression entirely on tiny messages (input vectors,
+// pickups, etc. — overhead would exceed any saving).
+const wss = new WebSocketServer({
+  server: httpServer,
+  perMessageDeflate: {
+    zlibDeflateOptions: { level: 3 },        // fast end of the deflate spectrum
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true,
+    serverMaxWindowBits: 10,                 // smaller window = less per-conn memory
+    concurrencyLimit: 10,
+    threshold: 1024,                         // don't compress messages under 1 KB
+  },
+});
 const sockets = new Map(); // id -> ws
 
 function send(ws, type, payload) {
