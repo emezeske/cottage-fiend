@@ -606,7 +606,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
       const walkBob = p.moving ? Math.sin(tnow / 110) * size * 0.05 : 0;
       const faceDx = size * 0.12;  // face sits left of center; nudge it right
       const faceY = car
-        ? (p.y - size * 0.50 + walkBob)    // perched on the Ferrari's cabin
+        ? (p.y - size * 0.40 + walkBob)    // perched on the Ferrari's cabin
         : (cy - size * 0.32 + walkBob - danceBob);
       ctx.save();
       ctx.translate(p.x + faceDx + danceSway, faceY);
