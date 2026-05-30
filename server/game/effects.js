@@ -1,7 +1,9 @@
 // Pure effect-selection logic. Injectable RNG so tests are deterministic.
 
 import {
-  BUFF_POOL, DEBUFF_POOL, WILDCARD_POOL, MALLEN_BUFF_POOL, FX,
+  BUFF_POOL, DEBUFF_POOL, WILDCARD_POOL,
+  MALLEN_BUFF_POOL, MALLEN_DEBUFF_POOL, MALLEN_WILDCARD_POOL,
+  FX,
 } from './constants.js';
 
 // Weighted pick from [{fx, w}]. rng() in [0,1).
@@ -15,10 +17,12 @@ export function weightedPick(pool, rng) {
   return pool[pool.length - 1].fx; // float-safety fallback
 }
 
-// Roll an effect for a claimer. Mallen => buffs only. Everyone else draws from
-// the combined buff+debuff+wildcard pool (weighted).
+// Roll an effect for a claimer. Mallen draws from his own (slightly trimmed)
+// versions of every pool — he gets buffs AND debuffs, just nothing that has
+// no actual effect on him (curd cannon needs a throw, greased needs a carry).
 export function rollEffect(isMallen, rng = Math.random) {
-  if (isMallen) return weightedPick(MALLEN_BUFF_POOL, rng);
-  const combined = [...BUFF_POOL, ...DEBUFF_POOL, ...WILDCARD_POOL];
+  const combined = isMallen
+    ? [...MALLEN_BUFF_POOL, ...MALLEN_DEBUFF_POOL, ...MALLEN_WILDCARD_POOL]
+    : [...BUFF_POOL,        ...DEBUFF_POOL,        ...WILDCARD_POOL];
   return weightedPick(combined, rng);
 }

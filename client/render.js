@@ -1016,9 +1016,17 @@ function drawMinimap(ctx, x, y, size, state, selfId) {
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
 
+  // squares for static landmarks so they don't get confused with circular player dots
+  const square = (wx, wy, side, color) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(mx(wx) - side / 2, my(wy) - side / 2, side, side);
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mx(wx) - side / 2 + 0.5, my(wy) - side / 2 + 0.5, side - 1, side - 1);
+  };
   if (state.loci) {
-    dot(state.loci.truck.x, state.loci.truck.y, 2.8, '#ffe14d');   // truck (yellow)
-    dot(state.loci.fridge.x, state.loci.fridge.y, 2.8, '#9ad7ff'); // fridge (blue)
+    square(state.loci.truck.x,  state.loci.truck.y,  6.5, '#ffe14d');   // truck (yellow)
+    square(state.loci.fridge.x, state.loci.fridge.y, 6.5, '#9ad7ff');   // fridge (blue)
   }
   for (const p of state.players || []) {
     if (p.isMallen) dot(p.x, p.y, 3.6, p.mallenColor || '#cd2a2a');

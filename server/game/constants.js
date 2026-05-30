@@ -285,9 +285,13 @@ export const WILDCARD_POOL = [
   { fx: FX.PINATA,  w: 2 },
 ];
 
-// The Mallen only rolls buffs that actually apply to him — he can't throw, so the
-// curd cannon (a throw buff) is excluded.
+// Pools the Mallen rolls from. He's eligible for buffs AND debuffs, but only
+// the ones that actually apply to him — anything that operates on the carry
+// system (CURD_CANNON throw buff, GREASED forced drop) is filtered out so he
+// never rolls effects that visibly do nothing.
 export const MALLEN_BUFF_POOL = BUFF_POOL.filter((e) => e.fx !== FX.CURD_CANNON);
+export const MALLEN_DEBUFF_POOL = DEBUFF_POOL.filter((e) => e.fx !== FX.GREASED);
+export const MALLEN_WILDCARD_POOL = WILDCARD_POOL;  // swap + piñata both apply
 
 // One-shot effects (applied instantly, no active duration).
 export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK, FX.DANCE_PARTY, FX.PORTAL, FX.NUKE]);

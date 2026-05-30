@@ -29,13 +29,20 @@ test('weightedPick always returns a member of the pool', () => {
   }
 });
 
-test('mallen only ever rolls buffs that apply to him (never curd cannon)', () => {
-  const buffs = new Set(BUFF_POOL.map(e => e.fx));
-  for (let seed = 1; seed <= 300; seed++) {
+test('mallen rolls from buffs + debuffs + wildcards, skipping ones with no effect', () => {
+  // never the throw-only or carry-only effects — those visibly do nothing on him.
+  let sawDebuff = false, sawWild = false;
+  const debuffs = new Set(DEBUFF_POOL.map(e => e.fx));
+  const wilds = new Set(WILDCARD_POOL.map(e => e.fx));
+  for (let seed = 1; seed <= 600; seed++) {
     const fx = rollEffect(true, seededRng(seed));
-    assert.ok(buffs.has(fx), `mallen got non-buff ${fx} at seed ${seed}`);
-    assert.notEqual(fx, FX.CURD_CANNON, `mallen got the throw-only curd cannon at seed ${seed}`);
+    assert.notEqual(fx, FX.CURD_CANNON, `mallen got throw-only curd cannon at seed ${seed}`);
+    assert.notEqual(fx, FX.GREASED,     `mallen got carry-only greased at seed ${seed}`);
+    if (debuffs.has(fx)) sawDebuff = true;
+    if (wilds.has(fx)) sawWild = true;
   }
+  assert.ok(sawDebuff, 'mallen should occasionally roll a debuff');
+  assert.ok(sawWild,   'mallen should occasionally roll a wildcard');
 });
 
 test('delivery players can roll debuffs and wildcards', () => {

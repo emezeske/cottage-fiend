@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { Game, _resetIds } from '../server/game/game.js';
 import {
-  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL, BUFF_POOL, WILDCARD_POOL, MALLEN_BUFF_POOL, PRESENT, TICK_MS,
+  PHASE, MALLEN, ROUND, LOCI, THROW, FRENZY, PLAYER, FX, EFFECT, ONE_SHOT, DEBUFF_POOL, BUFF_POOL, WILDCARD_POOL,
+  MALLEN_BUFF_POOL, MALLEN_DEBUFF_POOL, MALLEN_WILDCARD_POOL, PRESENT, TICK_MS,
 } from '../server/game/constants.js';
 import { seededRng } from './helpers.js';
 
@@ -917,21 +918,35 @@ test('gift deck: a new player sees every gift type once before any repeats', () 
   assert.equal(p.giftDeck.length, 0, 'deck drained after one full cycle');
 });
 
-test('gift deck: Mallen draws only from his own buff pool, also unique-first', () => {
+test('gift deck: Mallen draws from his own buff + debuff + wildcard pools, unique-first', () => {
   const g = newGame();
   g.addPlayer('crew');                              // ensure Mallen slot is open
   const mid = g.addPlayer('mallen');
   g.startRound(); advance(g, 3200);
   const m = g.players.get(mid);
   assert.ok(m.isMallen);
-  const expected = new Set(MALLEN_BUFF_POOL.map((e) => e.fx));
+  const expected = new Set([
+    ...MALLEN_BUFF_POOL, ...MALLEN_DEBUFF_POOL, ...MALLEN_WILDCARD_POOL,
+  ].map((e) => e.fx));
   const seen = new Set();
   for (let i = 0; i < expected.size; i++) {
     g._applyPresent(m, g._clock);
     seen.add(m._lastFx);
     assert.ok(expected.has(m._lastFx), `Mallen drew non-Mallen fx ${m._lastFx}`);
   }
-  assert.equal(seen.size, expected.size, 'Mallen saw every buff before any repeat');
+  assert.equal(seen.size, expected.size, 'Mallen saw every eligible gift before any repeat');
+});
+
+test('gift deck: Mallen never rolls effects he can\'t actually use (greased, curd cannon)', () => {
+  const g = newGame();
+  g.addPlayer('crew');
+  const mid = g.addPlayer('mallen');
+  g.startRound(); advance(g, 3200);
+  const m = g.players.get(mid);
+  // drain the whole deck and verify no excluded effect appears anywhere in it
+  const deck = g._buildGiftDeck(m);
+  assert.ok(!deck.includes(FX.GREASED),     'GREASED excluded — Mallen has no carry');
+  assert.ok(!deck.includes(FX.CURD_CANNON), 'CURD_CANNON excluded — Mallen has no throw');
 });
 
 test('gift deck: forced-present admin override bypasses the deck', () => {

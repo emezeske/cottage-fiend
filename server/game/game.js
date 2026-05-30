@@ -7,7 +7,8 @@
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
   PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
-  BUFF_POOL, WILDCARD_POOL, MALLEN_BUFF_POOL,
+  BUFF_POOL, WILDCARD_POOL,
+  MALLEN_BUFF_POOL, MALLEN_DEBUFF_POOL, MALLEN_WILDCARD_POOL,
   MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC, DANCE, PORTAL, NUKE,
 } from './constants.js';
 
@@ -549,12 +550,14 @@ export class Game {
   }
 
   // Build a per-player "every gift, one of each" deck (shuffled with the game
-  // RNG so test seeds reproduce). Mallen draws from his own buff-only pool;
-  // delivery players get the full set: buffs + debuffs + wildcards.
+  // RNG so test seeds reproduce). Mallen draws from his own pools — same
+  // categories as the crew (buffs + debuffs + wildcards), just trimmed to
+  // gifts that have an actual effect on him.
   _buildGiftDeck(p) {
-    const pool = p.isMallen
-      ? MALLEN_BUFF_POOL.map((e) => e.fx)
-      : [...BUFF_POOL, ...DEBUFF_POOL, ...WILDCARD_POOL].map((e) => e.fx);
+    const src = p.isMallen
+      ? [...MALLEN_BUFF_POOL, ...MALLEN_DEBUFF_POOL, ...MALLEN_WILDCARD_POOL]
+      : [...BUFF_POOL,        ...DEBUFF_POOL,        ...WILDCARD_POOL];
+    const pool = src.map((e) => e.fx);
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(this.rng() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
