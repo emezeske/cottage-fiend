@@ -256,6 +256,10 @@ function drawGoldenCurds(ctx, state) {
 const BUMMER_MS = 3000;
 const bummers = [];
 export function addBummer(id) { bummers.push({ id, t0: performance.now() }); }
+function isBummer(id) {
+  const now = performance.now();
+  return bummers.some(b => b.id === id && now - b.t0 < BUMMER_MS);
+}
 function drawBummers(ctx, state) {
   const now = performance.now();
   const players = (state && state.players) || [];
@@ -806,10 +810,18 @@ function drawPlayer(ctx, p, frame, isSelf) {
     ctx.strokeText(`☢ TARGETING  T-${t}`, p.x, topY - 16);
     ctx.fillText(`☢ TARGETING  T-${t}`, p.x, topY - 16);
   } else if (p.stunned && !golden && !dancing) {
+    // Total Bummer stun gets its own label instead of the generic STUNNED.
+    const bummed = isBummer(p.id);
     ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.fillStyle = '#9fefff';
-    ctx.strokeText('💫 STUNNED 💫', p.x, topY - 16);
-    ctx.fillText('💫 STUNNED 💫', p.x, topY - 16);
+    if (bummed) {
+      ctx.fillStyle = '#ff5c75';
+      ctx.strokeText('💀 TOTAL BUMMER 💀', p.x, topY - 16);
+      ctx.fillText('💀 TOTAL BUMMER 💀', p.x, topY - 16);
+    } else {
+      ctx.fillStyle = '#9fefff';
+      ctx.strokeText('💫 STUNNED 💫', p.x, topY - 16);
+      ctx.fillText('💫 STUNNED 💫', p.x, topY - 16);
+    }
   } else if (p.effect) {
     const label = EFFECT_LABELS[p.effect] || p.effect;
     ctx.font = 'bold 12px system-ui, sans-serif';
