@@ -2,7 +2,7 @@
 // World is drawn under a (devicePixelRatio * following-camera) transform; HUD and
 // overlays are drawn in CSS-pixel screen space on top.
 
-import { images } from './assets.js';
+import { images, PLAYER_COLORS } from './assets.js';
 import { computeCamera, getCamera } from './camera.js';
 
 const PHASE = { LOBBY: 'lobby', COUNTDOWN: 'countdown', PLAYING: 'playing', LEADERBOARD: 'leaderboard' };
@@ -792,12 +792,6 @@ function drawChargeArc(ctx, charge) {
   ctx.fillRect(20 + len - 4, -10, 4, 20);
   ctx.restore();
 }
-
-// player-variant colors (match the 12 recolored delivery sprites)
-const PLAYER_COLORS = [
-  '#cd3c34', '#3a6ecd', '#46af5c', '#d7a834', '#9650c3', '#3ab6b2',
-  '#eb7d23', '#ee5faa', '#46cde1', '#a0cd37', '#8c5f37', '#cdcdd7',
-];
 
 // An edge arrow pointing toward an off-screen world target (player/mallen/locus).
 function edgeArrow(ctx, cssW, cssH, target, color, label, size) {
