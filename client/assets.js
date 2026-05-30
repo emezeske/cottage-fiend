@@ -20,16 +20,19 @@ const MANIFEST = {
   mallen_face: 'mallen_face.webp',          // composited onto the Mallen's head
   mallen_face_fiend: 'mallen_face_fiend.webp', // ...during frenzy
 };
-// delivery_{variant}_{dir}_{frame}  (grayscale recolored into 12 player colors)
+// delivery_{variant}_{dir}_{frame} — all 12 variants currently share a single
+// set of sprites (no per-player colorization yet). The manifest aliases all
+// variant keys to delivery_{dir}_{frame}.webp so we don't duplicate 192 files.
 for (let v = 0; v < PLAYER_VARIANTS; v++)
   for (const d of DIRS)
     for (let f = 0; f < 2; f++)
-      MANIFEST[`delivery_${v}_${d}_${f}`] = `delivery_${v}_${d}_${f}.webp`;
-// mallen_{dir}_{frame} (normal) and mallen_frenzy_{dir}_{frame} (frenzy)
+      MANIFEST[`delivery_${v}_${d}_${f}`] = `delivery_${d}_${f}.webp`;
+// mallen_{dir}_{frame} (normal). The frenzy slot reuses the same art until we
+// have a dedicated frenzy sheet — alias keeps render code unchanged.
 for (const d of DIRS)
   for (let f = 0; f < 2; f++) {
     MANIFEST[`mallen_${d}_${f}`] = `mallen_${d}_${f}.webp`;
-    MANIFEST[`mallen_frenzy_${d}_${f}`] = `mallen_frenzy_${d}_${f}.webp`;
+    MANIFEST[`mallen_frenzy_${d}_${f}`] = `mallen_${d}_${f}.webp`;
   }
 // ferrari_{dir} — shown instead of the crew sprite while they have 2X SPEED
 for (const d of DIRS) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.webp`;
