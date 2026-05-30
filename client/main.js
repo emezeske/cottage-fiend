@@ -121,9 +121,10 @@ const AIM_DEADZONE = 14;             // px from touchdown before aim kicks in
 let aimOrigin = null;                // { x, y } client px at touchdown
 let aimPid = null;
 // nuke: local-only reticle while the buff is held + the thumb is dragging on the
-// throw button. Server commits on release via MSG.NUKE_LAUNCH (world coords).
-const NUKE_RETICLE_RANGE = 720;      // matches server NUKE.reticleRange (in world units)
-const NUKE_JOY_R = 56;               // px of thumb travel that hits max range
+// throw button. The reticle sits at a FIXED world distance from the player in
+// the thumb's direction (no magnitude — close enough to always be on-screen).
+// Server commits on release via MSG.NUKE_LAUNCH with world coords.
+const NUKE_RETICLE_RADIUS = 220;     // matches server NUKE.reticleRadius
 let nukeAim = null;                  // {x, y} in world coords, or null when not aiming
 let lastAimSent = { x: null, y: null, ts: 0 };
 function sendAim(x, y) {
@@ -359,7 +360,7 @@ function connect(name) {
         if (e.type === 'explosion') addCurdBurst(e.x, e.y); // curds radiate outward in timed rings
         // nuke: global "launch detected" SFX on commit + a big visual + boom on detonation
         if (e.type === 'nukeLaunch') playSound('nuke_launch');
-        if (e.type === 'nukeDetonate') { playSound('explosion'); addNukeExplosion(e.x, e.y); }
+        if (e.type === 'nukeDetonate') { playSound('nuke_explosion'); addNukeExplosion(e.x, e.y); }
       }
       updateButtons();
     }
@@ -498,13 +499,12 @@ function onActionMove(e) {
   e.preventDefault();
   const dx = e.clientX - aimOrigin.x, dy = e.clientY - aimOrigin.y;
   const len = Math.hypot(dx, dy);
-  // nuke aim: thumb travel maps to world distance from the player along the
-  // thumb's direction (clamped at NUKE_JOY_R == max reticle range).
+  // nuke aim: thumb direction only — reticle sits at a fixed world distance so
+  // the launcher can always see it (no magnitude scaling).
   if (p.nukeArmed) {
     if (len < AIM_DEADZONE) { nukeAim = null; return; }
-    const m = Math.min(1, len / NUKE_JOY_R);
     const ux = dx / len, uy = dy / len;
-    nukeAim = { x: p.x + ux * m * NUKE_RETICLE_RANGE, y: p.y + uy * m * NUKE_RETICLE_RANGE };
+    nukeAim = { x: p.x + ux * NUKE_RETICLE_RADIUS, y: p.y + uy * NUKE_RETICLE_RADIUS };
     return;
   }
   // throw aim (existing twin-stick): thumb direction = throw direction

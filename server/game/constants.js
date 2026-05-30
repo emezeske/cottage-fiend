@@ -196,9 +196,9 @@ export const FX = {
 // flinging anyone (and any tub) inside blastRadius outward with a randomized
 // physics-y velocity. Tubs being carried get knocked loose by the blast too.
 export const NUKE = {
-  reticleRange: 720,           // max distance from launcher the reticle can land
+  reticleRadius: 220,          // FIXED world distance from launcher to reticle (direction only)
   countdownMs: 3000,
-  blastRadius: 600,            // ~3/4 of a visible span
+  blastRadius: 180,            // mushroom cloud fits on one screen (visible span ~380 world units)
   playerFlingMinSpeed: 420,    // outward knockback (randomized)
   playerFlingMaxSpeed: 820,
   playerFlingMs: 1100,         // how long the launched victims fly

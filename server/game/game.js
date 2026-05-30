@@ -1365,6 +1365,14 @@ export class Game {
         score: p.score, eaten: p.eaten, carrying: p.carryingTubId != null,
         charging: p.charging, aim: p.charging ? p.aim : null,
         nukeArmed: !!p.nukeArmed,
+        // when this player launched a nuke that's still counting down, expose
+        // its target + countdown so other clients can render the laser line +
+        // the "hold still" indicator above their head, and skip stun visuals.
+        nukeLaunching: this.activeNukes.some(n => n.launcherId === p.id),
+        nukeAim: (() => { const n = this.activeNukes.find(x => x.launcherId === p.id);
+                          return n ? { x: n.x, y: n.y } : null; })(),
+        nukeMs: (() => { const n = this.activeNukes.find(x => x.launcherId === p.id);
+                         return n ? Math.max(0, Math.round(n.detonateAt - (this._clock || 0))) : 0; })(),
         frenzy: p.frenzyMs > 0, ready: !!p.ready,
         stunned: (this._clock || 0) < p.stunnedUntilMs,
         adStunned: (this._clock || 0) < p.adStunUntilMs,

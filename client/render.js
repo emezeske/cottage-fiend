@@ -283,7 +283,7 @@ function fallbackCircle(ctx, x, y, r, color) {
 // addNukeExplosion on a 'nukeDetonate' event and we play them back in the
 // world layer over NUKE_EXPLOSION_MS — 3 frames with a fade in/out.
 const NUKE_EXPLOSION_MS = 1800;
-const NUKE_BLAST_RADIUS = 600;                  // matches server NUKE.blastRadius
+const NUKE_BLAST_RADIUS = 180;                  // matches server NUKE.blastRadius
 const _nukeExplosions = [];
 export function addNukeExplosion(x, y) {
   _nukeExplosions.push({ x, y, t: performance.now() });
@@ -382,6 +382,23 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
 
   drawDiscs(ctx, state);   // flying disc-golf frisbees
 
+  // laser lines — thin red line from each launcher to their target. Drawn for
+  // every player mid-countdown (visible to all) and for the local player while
+  // aiming (their reticle is local-only).
+  ctx.save();
+  ctx.strokeStyle = '#ff2330';
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.7;
+  for (const lp of players) {
+    if (!lp.nukeLaunching || !lp.nukeAim) continue;
+    ctx.beginPath(); ctx.moveTo(lp.x, lp.y); ctx.lineTo(lp.nukeAim.x, lp.nukeAim.y); ctx.stroke();
+  }
+  if (nukeAim) {
+    const localSelf = players.find(pp => pp.id === selfId);
+    if (localSelf) { ctx.beginPath(); ctx.moveTo(localSelf.x, localSelf.y); ctx.lineTo(nukeAim.x, nukeAim.y); ctx.stroke(); }
+  }
+  ctx.restore();
+
   // active nukes — red dot visible to everyone, pulsing brighter as detonation nears
   if (state.nukes && state.nukes.length) {
     const tnow = performance.now();
@@ -390,23 +407,19 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
       ctx.save();
       ctx.globalAlpha = pulse;
       ctx.fillStyle = '#ff2330';
-      ctx.beginPath(); ctx.arc(n.x, n.y, 16, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#1e0608'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(n.x, n.y, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#1e0608'; ctx.lineWidth = 2;
       ctx.stroke();
-      // a faint danger ring for the blast radius
-      ctx.globalAlpha = 0.18 + 0.12 * Math.sin(tnow / 140);
-      ctx.strokeStyle = '#ff2330'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(n.x, n.y, NUKE_BLAST_RADIUS, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     }
   }
   // nuke reticle — local-only, only the player holding the buff sees it while aiming
   if (nukeAim) {
     const img = images.nuke_reticle;
-    const size = 110;
+    const size = 88;
     if (img) drawSprite(ctx, img, nukeAim.x, nukeAim.y, size, size);
     else { ctx.save(); ctx.strokeStyle = '#ff2330'; ctx.lineWidth = 4;
-           ctx.beginPath(); ctx.arc(nukeAim.x, nukeAim.y, 36, 0, Math.PI * 2); ctx.stroke();
+           ctx.beginPath(); ctx.arc(nukeAim.x, nukeAim.y, 28, 0, Math.PI * 2); ctx.stroke();
            ctx.restore(); }
   }
   // nuke explosions — 3-frame animation per detonation, with fade in/out
@@ -603,8 +616,11 @@ function drawPlayer(ctx, p, frame, isSelf) {
   const golden = isGolden(p.id);
   const dancing = !!p.dancing;       // dance-party victim: stunned, rendered dancing
   const danceParty = !!p.danceParty; // host OR dancer: gets the lights + hovering disco ball
+  // nuke-launching players are frozen for the countdown but should NOT show the
+  // stun-flicker / jitter / hue ring — they're committing a strike, not hit.
+  const visStun = p.stunned && !golden && !dancing && !p.nukeLaunching;
   // stunned = rapid frame flicker; otherwise walk only while moving
-  const f = (p.stunned && !golden && !dancing) ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
+  const f = visStun ? ((tnow / 55) | 0) & 1 : (p.moving ? frame : 0);
   let img;
   if (p.isMallen) img = images[`mallen${p.frenzy ? '_frenzy' : ''}_${dir}_${f}`];
   else img = images[`delivery_${p.spriteIndex}_${dir}_${f}`];
@@ -616,7 +632,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
   const size = p.radius * 3.0;
   let px = p.x;
   const cy = p.y - size * 0.12;
-  if (p.stunned && !golden && !dancing) px += (Math.random() - 0.5) * 4; // jitter/shake
+  if (visStun) px += (Math.random() - 0.5) * 4; // jitter/shake
   if (p.dashing) addDashTrail(p.x, cy, size * 0.42);
 
   // dance lights wash over the host AND every dancer (behind the sprite)
@@ -629,7 +645,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
     drawSprite(ctx, img, px + danceSway, cy - danceBob, size, size);
   } else if (car) {
     drawSprite(ctx, car, px, p.y, size * 1.9, size * 1.9); // centered on the player
-  } else if (p.stunned && !golden) {
+  } else if (visStun) {
     // A Mallen chomp can stun ~everyone at once, so avoid shadowBlur here (it's a
     // brutal per-sprite mobile GPU cost when many are stunned) — use a cheap
     // hue-cycling ring + the existing flicker/jitter instead.
@@ -726,6 +742,14 @@ function drawPlayer(ctx, p, frame, isSelf) {
     ctx.textAlign = 'left';
     ctx.fillText('AD', ax, ay + 6);
     ctx.textAlign = 'center';
+  } else if (p.nukeLaunching) {
+    // they're frozen committing a strike, not stunned — show a targeting cue
+    // and the live countdown so spectators know what's about to happen.
+    const t = ((p.nukeMs || 0) / 1000).toFixed(1);
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillStyle = '#ff2330';
+    ctx.strokeText(`☢ TARGETING  T-${t}`, p.x, topY - 16);
+    ctx.fillText(`☢ TARGETING  T-${t}`, p.x, topY - 16);
   } else if (p.stunned && !golden && !dancing) {
     ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.fillStyle = '#9fefff';
