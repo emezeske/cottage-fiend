@@ -7,6 +7,13 @@ import { computeCamera, getCamera } from './camera.js';
 
 const PHASE = { LOBBY: 'lobby', COUNTDOWN: 'countdown', PLAYING: 'playing', LEADERBOARD: 'leaderboard' };
 
+// Cached performance.now() for the current frame. render() sets it once at the
+// top so every draw function below reads a single consistent timestamp instead
+// of calling performance.now() many times per frame. The add* event-helpers
+// (called from outside the render loop, e.g. WebSocket event handlers) keep
+// their own performance.now() calls so they get a real "now" at event time.
+let _now = 0;
+
 export const AD_H = 70; // height of the top ad banner (CSS px); HUD sits below it
 // Bottom edge of the score HUD (updated each frame by drawHUD). Edge arrows clamp
 // below this so they never hide under the HUD. Defaults to the ad banner.
@@ -195,12 +202,11 @@ export function addGoldenCurd(id) {
   goldenCurds.push({ id, t0: performance.now() });
 }
 function isGolden(id) {
-  const now = performance.now();
-  return goldenCurds.some(g => g.id === id && now - g.t0 < GOLDEN_MS);
+  return goldenCurds.some(g => g.id === id && _now - g.t0 < GOLDEN_MS);
 }
 function drawGoldenCurds(ctx, state) {
   const img = images.golden_curd;
-  const now = performance.now();
+  const now = _now;
   const players = (state && state.players) || [];
   for (let i = goldenCurds.length - 1; i >= 0; i--) {
     const g = goldenCurds[i];
@@ -257,11 +263,10 @@ const BUMMER_MS = 3000;
 const bummers = [];
 export function addBummer(id) { bummers.push({ id, t0: performance.now() }); }
 function isBummer(id) {
-  const now = performance.now();
-  return bummers.some(b => b.id === id && now - b.t0 < BUMMER_MS);
+  return bummers.some(b => b.id === id && _now - b.t0 < BUMMER_MS);
 }
 function drawBummers(ctx, state) {
-  const now = performance.now();
+  const now = _now;
   const players = (state && state.players) || [];
   for (let i = bummers.length - 1; i >= 0; i--) {
     const b = bummers[i];
@@ -327,6 +332,7 @@ export function addNukeExplosion(x, y) {
 }
 
 export function render(ctx, canvas, state, selfId, charge, nukeAim) {
+  _now = performance.now();   // single timestamp shared by every draw call below
   walkClock += 1;
   const cam = computeCamera(canvas, state, selfId);
   const { cssW, cssH } = cam;
@@ -382,7 +388,7 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
   // portals — ground layer (drawn under tubs / players). 3-frame animation,
   // brief fade-in at spawn + fade-out as the pair's lifetime expires.
   if (state.portals && state.portals.length) {
-    const tnow = performance.now();
+    const tnow = _now;
     const frame = ((tnow / 130) | 0) % 3;
     for (const pr of state.portals) {
       const ms = pr.msRemaining || 0;
@@ -399,13 +405,13 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
   // Drawn AFTER splats so a flying tub reads on top of its own trail.
   for (const t of tubs) {
     if (t.state === 'carried') continue;
-    if (t.state === 'flying' && Math.random() < 0.35) addSplat(t.x, t.y); // splat trail in flight
+    if (t.state === 'flying' && Math.random() < 0.20) addSplat(t.x, t.y); // splat trail in flight
     drawSprite(ctx, images.tub, t.x, t.y, 36, 36);
     if (!images.tub) fallbackCircle(ctx, t.x, t.y, 15, '#f2f0e0');
   }
 
   // walk frame: time-based (framerate-independent) and slower than before
-  const animFrame = ((performance.now() / 230) | 0) & 1;
+  const animFrame = ((_now / 230) | 0) & 1;
   drawDashTrail(ctx);   // rainbow trail (behind players)
   drawCorgis(ctx, state);
   for (const p of players) drawPlayer(ctx, p, animFrame, p.id === selfId);
@@ -438,7 +444,7 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
 
   // active nukes — red dot visible to everyone, pulsing brighter as detonation nears
   if (state.nukes && state.nukes.length) {
-    const tnow = performance.now();
+    const tnow = _now;
     for (const n of state.nukes) {
       const pulse = 0.55 + 0.45 * Math.abs(Math.sin(tnow / 90));
       ctx.save();
@@ -462,7 +468,7 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
   // nuke explosions — 3-frame animation per detonation, with fade in/out
   for (let i = _nukeExplosions.length - 1; i >= 0; i--) {
     const ex = _nukeExplosions[i];
-    const age = performance.now() - ex.t;
+    const age = _now - ex.t;
     if (age >= NUKE_EXPLOSION_MS) { _nukeExplosions.splice(i, 1); continue; }
     const t = age / NUKE_EXPLOSION_MS;
     const frame = Math.min(2, (t * 3) | 0);
@@ -611,7 +617,7 @@ function drawCorgis(ctx, state) {
 
 // DISC_GOLF projectiles — spinning frisbees (cycle the 8 frames, phase per disc)
 function drawDiscs(ctx, state) {
-  const t = performance.now();
+  const t = _now;
   for (const d of (state && state.discs) || []) {
     const f = (((t / 55) | 0) + d.id) % 8;
     const img = images[`disc_${f}`];
@@ -656,7 +662,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
   if (p.charging && p.effect === 'backwards') faceDir = { x: -faceDir.x, y: -faceDir.y };
   const dir = dir4(faceDir.x, faceDir.y);     // delivery + Mallen art (4 cardinals)
   const carDir = dir8(faceDir.x, faceDir.y);   // ferrari art (still 8 directions)
-  const tnow = performance.now();
+  const tnow = _now;
   // golden-curd celebration freezes the player too, but it's a buff — show the
   // golden animation (drawGoldenCurds) instead of the debuff stun visuals.
   const golden = isGolden(p.id);
@@ -763,7 +769,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
   if (p.effect === 'invincible' && images.tub) {
     const headY = cy - size * 0.32;
     const orbitR = size * 0.38;
-    const spin = performance.now() * 0.005;
+    const spin = _now * 0.005;
     const ts = size * 0.2;
     for (let i = 0; i < 3; i++) {
       const a = spin + (i / 3) * Math.PI * 2;
@@ -1093,7 +1099,7 @@ function drawMinimap(ctx, x, y, size, state, selfId) {
     const me = (state.players || []).find((p) => p.id === selfId);
     if (me) {
       const cx = mx(me.x), cy = my(me.y);
-      const tnow = performance.now();
+      const tnow = _now;
       const pulse = 5.5 + Math.sin(tnow / 220) * 1.2;
       ctx.save();
       ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.9)';
@@ -1108,7 +1114,7 @@ function drawMinimap(ctx, x, y, size, state, selfId) {
 // a swirling "hurricane" of cottage cheese tubs — concentric rings spinning at
 // different speeds/directions, radii pulsing in and out
 function drawTubHurricane(ctx, W, H) {
-  const t = performance.now();
+  const t = _now;
   const cx = W / 2, cy = H / 2;
   const maxR = Math.max(W, H) * 0.62;
   const rings = 7;
@@ -1159,7 +1165,7 @@ function drawCountdown(ctx, W, H, state) {
 // a grid of tubs rocking in place, adjacent rows tilting in opposite directions
 // (hamster-dance style). Drawn under the dark overlay so it's subtle.
 function drawTubHamsterDance(ctx, W, H) {
-  const t = performance.now();
+  const t = _now;
   const step = 88, sz = 58;
   let row = 0;
   for (let y = step / 2; y < H + sz; y += step, row++) {

@@ -785,16 +785,34 @@ function updateButtons() {
 }
 
 // paint the action button each frame, overlaying a depleting pie-clock wedge while
-// the punch/attack is on cooldown
+// the punch/attack is on cooldown. Skips the style.background write when the value
+// is unchanged so the idle case (no cooldown) costs nothing.
+let _lastBtnBg = null;
 function paintActionButton() {
   const now = performance.now();
+  let bg;
   if (now < actionCdUntil && actionCdMs > 0) {
     const deg = ((actionCdUntil - now) / actionCdMs) * 360;
-    actionBtn.style.background =
-      `conic-gradient(rgba(0,0,0,0.45) ${deg}deg, rgba(0,0,0,0) ${deg}deg), ${baseActionColor}`;
+    bg = `conic-gradient(rgba(0,0,0,0.45) ${deg}deg, rgba(0,0,0,0) ${deg}deg), ${baseActionColor}`;
   } else {
-    actionBtn.style.background = baseActionColor;
+    bg = baseActionColor;
   }
+  if (bg !== _lastBtnBg) {
+    actionBtn.style.background = bg;
+    _lastBtnBg = bg;
+  }
+}
+
+// Any of these elements covering the canvas means there's nothing useful to draw
+// — game world is hidden underneath. Inline-style checks are reliable here
+// because the show/hide call sites all set .style.display directly (overlay
+// defaults visible via CSS and we set 'none' on JOIN; the others default to
+// 'none' via CSS and we set 'flex' when showing).
+function gameOverlayCovering() {
+  if (overlay.style.display !== 'none') return true;       // title screen (CSS default flex)
+  if (customize.style.display === 'flex') return true;     // character customize screen
+  if (adInterstitial.style.display === 'flex') return true; // ad interstitial debuff
+  return false;
 }
 
 // Pause audio + skip rendering while the tab/screen is hidden, to stop burning
@@ -815,6 +833,9 @@ function loop(ts = 0) {
   if (document.hidden) return;
   if (ts - lastFrameTs < TARGET_FRAME_MS - 1) return; // skip extra frames on hi-refresh screens
   lastFrameTs = ts;
+  // Title / customize / interstitial fully cover the canvas — drawing the game
+  // world under them just burns the GPU for no visible result.
+  if (gameOverlayCovering()) return;
   const p = me();
   if (charge.active && p) {
     charge.x = p.x; charge.y = p.y;
