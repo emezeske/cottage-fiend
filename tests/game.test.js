@@ -595,6 +595,63 @@ test('twin-stick aim: a stun mid-charge cancels the aim too', () => {
   assert.equal(p.aim, null, 'cancelled charge cancels the aim');
 });
 
+test('portal: claiming spawns a paired set (one near, one far, opposite colors)', () => {
+  assert.ok(BUFF_POOL.some(e => e.fx === FX.PORTAL), 'portal is a buff');
+  assert.ok(ONE_SHOT.has(FX.PORTAL), 'portal is a one-shot');
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  p.x = 1000; p.y = 1000;
+  g._applyOneShot(p, FX.PORTAL, g._clock);
+  assert.equal(g.portals.length, 2, 'two portals spawned');
+  const [a, b] = g.portals;
+  assert.equal(a.pairId, b.pairId, 'shared pair id');
+  assert.notEqual(a.color, b.color, 'opposite colors');
+  // one of them is near the claimer; the other is far away
+  const dA = Math.hypot(a.x - p.x, a.y - p.y);
+  const dB = Math.hypot(b.x - p.x, b.y - p.y);
+  const near = Math.min(dA, dB), far = Math.max(dA, dB);
+  assert.ok(near < 200, `near portal within ~110px ish, got ${near}`);
+  assert.ok(far > 600, `far portal at least ~700px away, got ${far}`);
+});
+
+test('portal: a player walking into a portal is teleported to its pair', () => {
+  const g = newGame();
+  const id = g.addPlayer('victim');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  // hand-place a portal pair so we don't depend on RNG spawn positions
+  const now = g._clock;
+  g.portals = [
+    { id: 1, pairId: 99, color: 'orange', x: 300,  y: 300,  expiresAt: now + 5000 },
+    { id: 2, pairId: 99, color: 'blue',   x: 1200, y: 1200, expiresAt: now + 5000 },
+  ];
+  p.x = 305; p.y = 300; p.portalCooldownUntilMs = 0;
+  p.vx = 0; p.vy = 0;
+  g._updatePortals(g._clock);
+  // teleported near the blue portal (within radius+offset)
+  assert.ok(Math.hypot(p.x - 1200, p.y - 1200) < 60, `expected teleport near (1200,1200), got (${p.x},${p.y})`);
+  assert.ok(p.portalCooldownUntilMs > g._clock, 'cooldown set');
+});
+
+test('portal: a flying tub keeps its velocity through the portal', () => {
+  const g = newGame();
+  g.addPlayer('a');
+  g.startRound(); advance(g, 3200);
+  const t = g._spawnTub(300, 300, 'flying');
+  t.vx = 320; t.vy = 0;
+  g.portals = [
+    { id: 1, pairId: 7, color: 'orange', x: 300,  y: 300,  expiresAt: g._clock + 5000 },
+    { id: 2, pairId: 7, color: 'blue',   x: 1200, y: 1200, expiresAt: g._clock + 5000 },
+  ];
+  g._updatePortals(g._clock);
+  // popped out near the blue portal, still moving east
+  assert.ok(Math.hypot(t.x - 1200, t.y - 1200) < 80, 'tub landed near pair');
+  assert.equal(t.vx, 320, 'velocity x preserved');
+  assert.equal(t.vy, 0, 'velocity y preserved');
+});
+
 test('magnet rips a carried tub out of a nearby player and pulls it toward the holder', () => {
   const g = newGame();
   const holder = g.addPlayer('holder');

@@ -344,7 +344,11 @@ function connect(name) {
         if (e.type === 'dominating' && e.id === selfId) playSound('dominating'); // you're 5+ ahead
         // golden curd: a global celebration — everyone sees the animation and hears it
         if (e.type === 'presentClaim' && e.fx === 'golden_curd') { playSound('golden_curd'); addGoldenCurd(e.id); }
-        else if (e.type === 'presentClaim' && e.id === selfId) playSound(e.fx); // local per-effect sound
+        else if (e.type === 'presentClaim' && e.id === selfId) {
+          // portal claim picks one of three random portal SFX
+          const name = e.fx === 'portal' ? `portal_${(Math.random() * 3) | 0}` : e.fx;
+          playSound(name);
+        }
         if (e.type === 'presentClaim' && e.id === selfId && e.fx === 'interstitial') showInterstitial();
         if (e.type === 'explosion') addCurdBurst(e.x, e.y); // curds radiate outward in timed rings
       }

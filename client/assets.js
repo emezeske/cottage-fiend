@@ -39,6 +39,11 @@ for (const d of DIRS) MANIFEST[`corgi_${d}`] = `corgi_${d}.webp`;
 for (let i = 0; i < 8; i++) MANIFEST[`disc_${i}`] = `disc_${i}.webp`;
 // discoball_{0..2} — shimmer frames hovering over dance-party players
 for (let i = 0; i < 3; i++) MANIFEST[`discoball_${i}`] = `discoball_${i}.webp`;
+// portal_{color}_{0..2} — paired teleport portals (orange + blue), 3-frame animation
+for (let i = 0; i < 3; i++) {
+  MANIFEST[`portal_orange_${i}`] = `portal_orange_${i}.webp`;
+  MANIFEST[`portal_blue_${i}`]   = `portal_blue_${i}.webp`;
+}
 
 export const images = {};
 

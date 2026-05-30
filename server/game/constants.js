@@ -184,6 +184,22 @@ export const FX = {
   CORGI_ATTACK: 'corgi_attack',  // buff: spawns a corgi that hunts and stuns everyone else
   DISC_GOLF: 'disc_golf',        // buff: periodically flings frisbees that bonk + stun others
   DANCE_PARTY: 'dance_party',    // buff: nearby players are forced to dance (stunned) while music plays
+  PORTAL: 'portal',              // one-shot buff: spawns a paired portal at the claimer + a random spot
+};
+
+// Portal buff: claiming spawns TWO portals (one orange + one blue) at random
+// positions — one next to the claimer, one elsewhere on the map. Anything that
+// touches a portal (players, tubs, corgis, discs) is teleported to the paired
+// portal and keeps its velocity. Brief cooldown after a teleport prevents the
+// classic ping-pong loop.
+export const PORTAL = {
+  radius: 38,
+  durationMs: 12000,
+  teleportCooldownMs: 700,
+  nearOffset: 110,           // distance from claimer to the same-side portal
+  minPairDistance: 700,      // the two portals must spawn at least this far apart
+  arenaMargin: 90,           // keep portals this far from arena edges
+  lociClear: 160,            // keep portals this far from truck/fridge
 };
 
 // Dance-party buff: everyone within radius of the initiator is stunned into dancing
@@ -230,6 +246,7 @@ export const BUFF_POOL = [
   { fx: FX.CORGI_ATTACK, w: 2 },
   { fx: FX.DISC_GOLF,    w: 2 },
   { fx: FX.DANCE_PARTY,  w: 2 },
+  { fx: FX.PORTAL,       w: 2 },
 ];
 export const DEBUFF_POOL = [
   { fx: FX.HALF_SPEED, w: 3 },
@@ -250,6 +267,6 @@ export const WILDCARD_POOL = [
 export const MALLEN_BUFF_POOL = BUFF_POOL.filter((e) => e.fx !== FX.CURD_CANNON);
 
 // One-shot effects (applied instantly, no active duration).
-export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK, FX.DANCE_PARTY]);
+export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK, FX.DANCE_PARTY, FX.PORTAL]);
 // Client-only effects (server still tracks them so the client can read its own).
 export const CLIENT_FX = new Set([FX.BACKWARDS, FX.BLINDNESS]);

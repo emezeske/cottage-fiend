@@ -332,6 +332,22 @@ export function render(ctx, canvas, state, selfId, charge) {
     if (age >= s.life) splats.splice(i, 1);
   }
 
+  // portals — ground layer (drawn under tubs / players). 3-frame animation,
+  // brief fade-in at spawn + fade-out as the pair's lifetime expires.
+  if (state.portals && state.portals.length) {
+    const tnow = performance.now();
+    const frame = ((tnow / 130) | 0) % 3;
+    for (const pr of state.portals) {
+      const ms = pr.msRemaining || 0;
+      const fade = Math.min(1, ms / 800) * Math.min(1, (12000 - ms) / 200 + 1);
+      ctx.save();
+      ctx.globalAlpha = fade;
+      drawSprite(ctx, images[`portal_${pr.color}_${frame}`], pr.x, pr.y, 96, 96);
+      if (!images[`portal_${pr.color}_${frame}`]) fallbackCircle(ctx, pr.x, pr.y, 38, pr.color === 'orange' ? '#ff7a1e' : '#4ab8ff');
+      ctx.restore();
+    }
+  }
+
   // tubs (ready/loose/flying — carried are drawn with their player).
   // Drawn AFTER splats so a flying tub reads on top of its own trail.
   for (const t of tubs) {

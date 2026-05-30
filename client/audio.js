@@ -38,6 +38,10 @@ const SFX_FILES = {
   interstitial: 'sfx_interstitial.mp3', // local: forced ad-break debuff jingle
   golden_curd: 'sfx_golden_curd.mp3', // global: golden-curd celebration fanfare
   dunk: 'sfx_dunk.mp3', // local: you scored by THROWING a tub into the fridge (carried delivery uses 'score')
+  // portal claim: one of these three plays at random (see picker in main.js)
+  portal_0: 'sfx_portal_0.mp3',
+  portal_1: 'sfx_portal_1.mp3',
+  portal_2: 'sfx_portal_2.mp3',
   corgi_attack: 'sfx_corgi_attack.mp3', // local: you grabbed the corgi buff (RECORD ME)
   disc_golf: 'sfx_disc_golf.mp3', // local: you grabbed disc golf (RECORD ME)
   // (no dance_party claim SFX — the looping theme covers the moment on its own)

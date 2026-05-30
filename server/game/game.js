@@ -7,7 +7,7 @@
 import {
   ARENA, PLAYER, MALLEN, FRENZY, TUB, THROW, LOCI, ROUND, PHASE, MSG,
   PRESENT, EFFECT, FX, ONE_SHOT, PUNCH, COLLISION, SAFE_ZONE, STUN, DEBUFF_POOL,
-  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC, DANCE,
+  MALLEN_POWER, MALLEN_POWER_DEFAULT, CORGI, DISC, DANCE, PORTAL,
 } from './constants.js';
 
 const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SFX
@@ -53,6 +53,8 @@ export class Game {
     this._corgiSeq = 1;
     this.discs = [];            // active DISC_GOLF projectiles
     this._discSeq = 1;
+    this.portals = [];          // active PORTAL pairs (orange + blue, paired by pairId)
+    this._portalSeq = 1;
     this._dominating = false;   // has the current 5+ point lead already been announced
   }
 
@@ -134,6 +136,7 @@ export class Game {
       adStunUntilMs: 0,           // frozen specifically by the interstitial-ad debuff (for the above-head icon)
       danceUntilMs: 0,            // forced to dance (stunned, rendered dancing) until this clock time
       dancePartyHostUntilMs: 0,   // you're HOSTING a dance party (a moving aura + your music) until this
+      portalCooldownUntilMs: 0,   // brief teleport immunity so portals don't ping-pong you
       dashUntilMs: 0,             // Mallen lunge active until this clock time
       dashVx: 0, dashVy: 0,       // lunge velocity
     };
@@ -592,7 +595,126 @@ export class Game {
       // over later — is forced to dance. Handled in _updateDanceParty.
       p.dancePartyHostUntilMs = now + DANCE.durationMs;
       this.events.push({ type: 'danceParty', x: p.x, y: p.y });
+    } else if (fx === FX.PORTAL) {
+      // Spawn a paired set of portals (one near the claimer, one elsewhere). The
+      // claimer gets a brief teleport-cooldown so the near portal doesn't yank
+      // them right back through it the moment it appears under their feet.
+      this._spawnPortalPair(p, now);
+      p.portalCooldownUntilMs = Math.max(p.portalCooldownUntilMs, now + PORTAL.teleportCooldownMs);
+      this.events.push({ type: 'portal', x: p.x, y: p.y });
     }
+  }
+
+  // Spawn a matched portal pair: one (color A) about PORTAL.nearOffset px from
+  // the claimer at a random angle, the other (color B) at a random arena point.
+  // Both share a pairId; teleporting from one drops you at the other.
+  _spawnPortalPair(p, now) {
+    const expiresAt = now + PORTAL.durationMs;
+    const pairId = this._portalSeq++;
+    // randomize which color spawns near the player
+    const nearColor = this.rng() < 0.5 ? 'orange' : 'blue';
+    const farColor  = nearColor === 'orange' ? 'blue' : 'orange';
+
+    // near portal: try a few random angles to find a spot clear of truck/fridge
+    let nearPos = null;
+    for (let tries = 0; tries < 12; tries++) {
+      const a = this.rng() * Math.PI * 2;
+      const x = p.x + Math.cos(a) * PORTAL.nearOffset;
+      const y = p.y + Math.sin(a) * PORTAL.nearOffset;
+      if (!this._portalSpotOK(x, y)) continue;
+      nearPos = { x, y }; break;
+    }
+    if (!nearPos) nearPos = { x: this._clamp(p.x + 60, PORTAL.arenaMargin, ARENA.width - PORTAL.arenaMargin),
+                              y: this._clamp(p.y + 60, PORTAL.arenaMargin, ARENA.height - PORTAL.arenaMargin) };
+
+    // far portal: random arena point at least minPairDistance away
+    let farPos = null;
+    for (let tries = 0; tries < 40; tries++) {
+      const x = PORTAL.arenaMargin + this.rng() * (ARENA.width  - 2 * PORTAL.arenaMargin);
+      const y = PORTAL.arenaMargin + this.rng() * (ARENA.height - 2 * PORTAL.arenaMargin);
+      if (!this._portalSpotOK(x, y)) continue;
+      if (dist(x, y, nearPos.x, nearPos.y) < PORTAL.minPairDistance) continue;
+      farPos = { x, y }; break;
+    }
+    if (!farPos) farPos = { x: ARENA.width - nearPos.x, y: ARENA.height - nearPos.y };
+
+    this.portals.push({ id: this._portalSeq++, pairId, color: nearColor,
+                        x: nearPos.x, y: nearPos.y, expiresAt });
+    this.portals.push({ id: this._portalSeq++, pairId, color: farColor,
+                        x: farPos.x,  y: farPos.y,  expiresAt });
+  }
+
+  _portalSpotOK(x, y) {
+    if (x < PORTAL.arenaMargin || x > ARENA.width  - PORTAL.arenaMargin) return false;
+    if (y < PORTAL.arenaMargin || y > ARENA.height - PORTAL.arenaMargin) return false;
+    if (dist(x, y, this.loci.truck.x,  this.loci.truck.y)  < PORTAL.lociClear) return false;
+    if (dist(x, y, this.loci.fridge.x, this.loci.fridge.y) < PORTAL.lociClear) return false;
+    return true;
+  }
+
+  _clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // Each tick: expire portals, then for every player / tub / corgi / disc that
+  // touches a portal, snap it to the paired portal and carry its velocity over.
+  _updatePortals(now) {
+    // expire pairs together so you don't end up with a one-sided portal
+    if (this.portals.length) {
+      const livePairs = new Set();
+      for (const pr of this.portals) if (now < pr.expiresAt) livePairs.add(pr.pairId);
+      this.portals = this.portals.filter((pr) => livePairs.has(pr.pairId) && now < pr.expiresAt);
+    }
+    if (!this.portals.length) return;
+    const byPair = new Map();
+    for (const pr of this.portals) {
+      if (!byPair.has(pr.pairId)) byPair.set(pr.pairId, []);
+      byPair.get(pr.pairId).push(pr);
+    }
+    const pairFor = (pr) => {
+      const pair = byPair.get(pr.pairId);
+      return pair && pair.find((o) => o.id !== pr.id);
+    };
+
+    // players
+    for (const p of this.players.values()) {
+      if (now < p.portalCooldownUntilMs) continue;
+      for (const pr of this.portals) {
+        if (dist(p.x, p.y, pr.x, pr.y) > PORTAL.radius) continue;
+        const pair = pairFor(pr);
+        if (!pair) break;
+        // place them on the OUT side of the destination portal (their motion
+        // direction) so they don't immediately re-trigger the entry portal.
+        const m = Math.hypot(p.vx || 0, p.vy || 0);
+        const ox = m > 1 ? (p.vx / m) * (PORTAL.radius + 12) : 0;
+        const oy = m > 1 ? (p.vy / m) * (PORTAL.radius + 12) : 0;
+        p.x = pair.x + ox; p.y = pair.y + oy;
+        const c = clampToArena(p.x, p.y, p.radius, ARENA);
+        p.x = c.x; p.y = c.y;
+        p.portalCooldownUntilMs = now + PORTAL.teleportCooldownMs;
+        this.events.push({ type: 'portalEnter', x: pr.x, y: pr.y, id: p.id });
+        break;
+      }
+    }
+
+    // anything else with momentum that should keep its trajectory through the
+    // portal: tubs (loose / flying / ready), corgis, discs.
+    const teleportObj = (obj) => {
+      for (const pr of this.portals) {
+        if (dist(obj.x, obj.y, pr.x, pr.y) > PORTAL.radius) continue;
+        if (obj._portalCooldownUntil && now < obj._portalCooldownUntil) continue;
+        const pair = pairFor(pr);
+        if (!pair) return false;
+        const m = Math.hypot(obj.vx || 0, obj.vy || 0);
+        const ox = m > 1 ? (obj.vx / m) * (PORTAL.radius + 12) : 0;
+        const oy = m > 1 ? (obj.vy / m) * (PORTAL.radius + 12) : 0;
+        obj.x = pair.x + ox; obj.y = pair.y + oy;
+        obj._portalCooldownUntil = now + PORTAL.teleportCooldownMs;
+        return true;
+      }
+      return false;
+    };
+    for (const t of this.tubs) if (t.state !== 'carried') teleportObj(t);
+    for (const c of this.corgis) teleportObj(c);
+    for (const d of this.discs)  teleportObj(d);
   }
 
   // Continuous dance-party aura: each active host forces every eligible player
@@ -790,6 +912,7 @@ export class Game {
       this._updateCorgis(dt, now);
       this._updateDiscGolf(dt, now);
       this._updateDanceParty(now);
+      this._updatePortals(now);
       this._checkCarriedDeliveries();
       this._capTubs();
       this._checkDominating();
@@ -1085,6 +1208,7 @@ export class Game {
       p.noPickupUntilMs = 0; p.stunnedUntilMs = 0; p.adStunUntilMs = 0; p.vx = 0; p.vy = 0;
       p.danceUntilMs = 0; p.dancePartyHostUntilMs = 0;
       p.dashUntilMs = 0; p.dashVx = 0; p.dashVy = 0;
+      p.portalCooldownUntilMs = 0;
     }
     this.phase = PHASE.COUNTDOWN;
     this.countdownMs = ROUND.startCountdownMs;
@@ -1093,6 +1217,7 @@ export class Game {
     this.presents = [];
     this.corgis = [];
     this.discs = [];
+    this.portals = [];
     this._nextPresentAt = null;
     this._stockTruck();
     this.events.push({ type: 'roundStart', n: this.roundNumber });
@@ -1140,6 +1265,10 @@ export class Game {
         id: c.id, x: Math.round(c.x), y: Math.round(c.y), dir: c.dir,
       })),
       discs: this.discs.map(d => ({ id: d.id, x: Math.round(d.x), y: Math.round(d.y) })),
+      portals: this.portals.map(pr => ({
+        id: pr.id, x: Math.round(pr.x), y: Math.round(pr.y), color: pr.color,
+        msRemaining: Math.max(0, Math.round(pr.expiresAt - (this._clock || 0))),
+      })),
     };
   }
 }
