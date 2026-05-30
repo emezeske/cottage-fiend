@@ -304,7 +304,7 @@ function wsUrl() {
 // mid-customize refresh keeps the in-progress look. First-time load (no saved
 // colors) gets random hues so people don't see the same defaults every time.
 // Older cf_*_hue keys auto-migrate to the new cf_*_color hex format.
-function _loadColor(colorKey, hueKey) {
+function _loadColor(colorKey, hueKey, fallbackHex) {
   const saved = localStorage.getItem(colorKey);
   if (saved) return saved;
   const hueStr = localStorage.getItem(hueKey);
@@ -312,12 +312,12 @@ function _loadColor(colorKey, hueKey) {
     const h = Number(hueStr);
     if (Number.isFinite(h)) return hueToHex(h);
   }
-  return hueToHex(Math.floor(Math.random() * 360));
+  return fallbackHex || hueToHex(Math.floor(Math.random() * 360));
 }
 let playerColors = {
-  shirt:   _loadColor('cf_shirt_color',   'cf_shirt_hue'),
-  pants:  _loadColor('cf_pants_color',  'cf_pants_hue'),
-  mallen: _loadColor('cf_mallen_color', 'cf_mallen_hue'),
+  shirt:  _loadColor('cf_shirt_color',  'cf_shirt_hue'),                  // random first time
+  pants:  _loadColor('cf_pants_color',  'cf_pants_hue'),                  // random first time
+  mallen: _loadColor('cf_mallen_color', 'cf_mallen_hue', '#cd2a2a'),      // Mallen default is always red
 };
 // persist the seed colors so a refresh before pressing READY keeps the look
 localStorage.setItem('cf_shirt_color',   playerColors.shirt);
