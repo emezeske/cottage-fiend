@@ -137,31 +137,46 @@ const SHIRT_REF_V = 0.82;
 const PANTS_REF_V = 0.40;
 const MALLEN_REF_V = 0.55;
 
+// LRU-style sprite cache. Each entry is a 120x120 RGBA canvas (~58 KB),
+// 8 per unique (shirt,pants) combo — at this cap the cache tops out around
+// ~12 MB, plenty of headroom for 20 players + a few extra combos.
+const SPRITE_CACHE_MAX = 192;
 const _spriteCache = new Map();
+function _cacheGet(map, key, cap) {
+  if (!map.has(key)) return null;
+  const v = map.get(key);
+  map.delete(key); map.set(key, v);                   // re-insert => most recently used
+  return v;
+}
+function _cachePut(map, key, value, cap) {
+  map.set(key, value);
+  while (map.size > cap) { const oldest = map.keys().next().value; map.delete(oldest); }
+}
 export function getDeliverySprite(shirtHex, pantsHex, dir, frame) {
   const s = normalizeHex(shirtHex), p = normalizeHex(pantsHex);
   const key = `${s}|${p}|${dir}|${frame}`;
-  let canvas = _spriteCache.get(key);
+  let canvas = _cacheGet(_spriteCache, key, SPRITE_CACHE_MAX);
   if (canvas) return canvas;
   const src = images[`delivery_${dir}_${frame}`];
   if (!src) return null;
   canvas = recolorDelivery(src, hexToHsv(s), hexToHsv(p));
-  _spriteCache.set(key, canvas);
+  _cachePut(_spriteCache, key, canvas, SPRITE_CACHE_MAX);
   return canvas;
 }
 
 // Mallen body is dominantly red (H~4 S~0.95) with frenzy adding pink/purple
 // at H~280. Tint everything in the warm-arc so frenzy shifts with the body.
+const MALLEN_CACHE_MAX = 64;
 const _mallenCache = new Map();
 export function getMallenSprite(mallenHex, frenzy, dir, frame) {
   const m = normalizeHex(mallenHex);
   const key = `${m}|${frenzy ? 1 : 0}|${dir}|${frame}`;
-  let canvas = _mallenCache.get(key);
+  let canvas = _cacheGet(_mallenCache, key, MALLEN_CACHE_MAX);
   if (canvas) return canvas;
   const src = images[`mallen${frenzy ? '_frenzy' : ''}_${dir}_${frame}`];
   if (!src) return null;
   canvas = recolorMallen(src, hexToHsv(m));
-  _mallenCache.set(key, canvas);
+  _cachePut(_mallenCache, key, canvas, MALLEN_CACHE_MAX);
   return canvas;
 }
 

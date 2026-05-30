@@ -197,6 +197,7 @@ export class Game {
   setInput(id, x, y) {
     const p = this.players.get(id);
     if (!p) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;       // reject NaN/Infinity
     // Preserve magnitude (clamp to <=1) so an analog stick can scale speed.
     // Unit-vector clients (legacy tap-and-drag) keep behaving as before.
     let m = Math.hypot(x, y);
@@ -515,6 +516,12 @@ export class Game {
   }
 
   _applyPresent(p, now) {
+    // Picking up a new gift consumes any prior armed-state from a previous
+    // buff (NUKE / CURD_CANNON) — otherwise the flags can leak and a player
+    // could fire a hidden nuke or a cannon-charged throw long after the
+    // visible buff was replaced.
+    p.nukeArmed = false;
+    p.cannonArmed = false;
     // gift sequencing: each player gets a shuffled "deck" of every gift type
     // (one of each) drained on their first N pickups. After the deck is empty
     // they switch to true random (rollEffect) which allows repeats. This
@@ -598,6 +605,8 @@ export class Game {
           // shove via direct position bump (no persistent velocity on players)
           o.x += n.x * EFFECT.explosionKnockback * 0.12;
           o.y += n.y * EFFECT.explosionKnockback * 0.12;
+          const cc = clampToArena(o.x, o.y, o.radius, ARENA);
+          o.x = cc.x; o.y = cc.y;
           // if the claimer is Mallen, victims also drop their tubs
           if (p.isMallen && o.carryingTubId != null) {
             const t = this.tubs.find(t => t.id === o.carryingTubId);
@@ -618,7 +627,10 @@ export class Game {
     } else if (fx === FX.PINATA) {
       for (let i = 0; i < EFFECT.pinataCount; i++) {
         const a = (i / EFFECT.pinataCount) * Math.PI * 2;
-        const t = this._spawnTub(p.x + Math.cos(a) * 40, p.y + Math.sin(a) * 40, 'loose');
+        // clamp to arena so a piñata claimed near an edge doesn't shoot tubs
+        // into the void where they're unreachable
+        const c = clampToArena(p.x + Math.cos(a) * 40, p.y + Math.sin(a) * 40, TUB.radius, ARENA);
+        this._spawnTub(c.x, c.y, 'loose');
       }
       this.events.push({ type: 'pinata', x: p.x, y: p.y });
     } else if (fx === FX.INTERSTITIAL) {
@@ -846,17 +858,29 @@ export class Game {
     };
 
     // players
+    // entities at rest (stunned players, dropped tubs sitting on a portal)
+    // would otherwise place exactly on top of the destination portal and
+    // ping-pong every cooldown cycle. When velocity is zero, push them just
+    // outside the pair's radius in a random direction so they have to wander
+    // back in to re-trigger.
+    const outOffset = (vx, vy) => {
+      const m = Math.hypot(vx || 0, vy || 0);
+      if (m > 1) {
+        const k = PORTAL.radius + 12;
+        return [(vx / m) * k, (vy / m) * k];
+      }
+      const a = this.rng() * Math.PI * 2;
+      const r = PORTAL.radius + 16;
+      return [Math.cos(a) * r, Math.sin(a) * r];
+    };
+
     for (const p of this.players.values()) {
       if (now < p.portalCooldownUntilMs) continue;
       for (const pr of this.portals) {
         if (dist(p.x, p.y, pr.x, pr.y) > PORTAL.radius) continue;
         const pair = pairFor(pr);
         if (!pair) break;
-        // place them on the OUT side of the destination portal (their motion
-        // direction) so they don't immediately re-trigger the entry portal.
-        const m = Math.hypot(p.vx || 0, p.vy || 0);
-        const ox = m > 1 ? (p.vx / m) * (PORTAL.radius + 12) : 0;
-        const oy = m > 1 ? (p.vy / m) * (PORTAL.radius + 12) : 0;
+        const [ox, oy] = outOffset(p.vx, p.vy);
         p.x = pair.x + ox; p.y = pair.y + oy;
         const c = clampToArena(p.x, p.y, p.radius, ARENA);
         p.x = c.x; p.y = c.y;
@@ -874,9 +898,7 @@ export class Game {
         if (obj._portalCooldownUntil && now < obj._portalCooldownUntil) continue;
         const pair = pairFor(pr);
         if (!pair) return false;
-        const m = Math.hypot(obj.vx || 0, obj.vy || 0);
-        const ox = m > 1 ? (obj.vx / m) * (PORTAL.radius + 12) : 0;
-        const oy = m > 1 ? (obj.vy / m) * (PORTAL.radius + 12) : 0;
+        const [ox, oy] = outOffset(obj.vx, obj.vy);
         obj.x = pair.x + ox; obj.y = pair.y + oy;
         obj._portalCooldownUntil = now + PORTAL.teleportCooldownMs;
         return true;
@@ -894,6 +916,9 @@ export class Game {
   _updateDanceParty(now) {
     for (const h of this.players.values()) {
       if (now >= h.dancePartyHostUntilMs) continue;
+      // a stunned / dashing host's aura goes quiet — otherwise a stun-locked
+      // host can permanently stun-lock everyone in range (no one can react)
+      if (now < h.stunnedUntilMs || now < h.dashUntilMs) continue;
       for (const o of this.players.values()) {
         if (o.id === h.id || o.effect === FX.INVINCIBLE) continue;
         if (dist(h.x, h.y, o.x, o.y) > DANCE.radius) continue;
@@ -999,6 +1024,10 @@ export class Game {
     const now = this._clock || 0;
     for (const p of this.players.values()) {
       if (p.effect !== FX.MAGNET) continue;
+      // Mallen with a magnet would yank every ready tub off the truck without
+      // ever leaving the (Mallen-blocked) pickup zone — defeats the safe zone.
+      // The crew still uses the full magnet pull; Mallen just can't.
+      if (p.isMallen) continue;
       for (const t of this.tubs) {
         // rip a tub out of another player's hands if they're inside the pull range
         // (invincible players are immune, matching the rest of the game)
@@ -1053,14 +1082,14 @@ export class Game {
     // movement (all phases let you wander, but scoring only in PLAYING)
     for (const p of this.players.values()) {
       const speed = this._effectiveSpeed(p);
-      // locked = mallen mid-chomp, or anyone stunned by a Mallen devour
-      const locked = (p.isMallen && now < p.eatingUntilMs) || now < p.stunnedUntilMs;
-      if (locked) {
-        p.vx = 0; p.vy = 0;          // frozen: no coasting through a stun
-      } else if (now < p.dashUntilMs) {
-        p.vx = p.dashVx; p.vy = p.dashVy;  // Mallen lunge overrides input
+      // dash override wins over stuns — a nuke blast (or Mallen lunge) carries
+      // through dance-stun / corgi-stun / ad-stun so victims actually get flung.
+      if (now < p.dashUntilMs) {
+        p.vx = p.dashVx; p.vy = p.dashVy;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
+      } else if ((p.isMallen && now < p.eatingUntilMs) || now < p.stunnedUntilMs) {
+        p.vx = 0; p.vy = 0;          // frozen: no coasting through a stun
       } else {
         const tvx = p.moveInput.x * speed, tvy = p.moveInput.y * speed;
         if (p.effect === FX.BANANA) {
@@ -1393,6 +1422,7 @@ export class Game {
       p.dashUntilMs = 0; p.dashVx = 0; p.dashVy = 0;
       p.portalCooldownUntilMs = 0;
       p.nukeArmed = false;
+      p.giftDeck = null;                       // fresh "every gift once" deck each round
     }
     this.phase = PHASE.COUNTDOWN;
     this.countdownMs = ROUND.startCountdownMs;

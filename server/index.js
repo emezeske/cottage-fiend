@@ -35,7 +35,12 @@ const httpServer = http.createServer((req, res) => {
     game.setForcedPresent(forcedPresent);    // keep the testing override across a reset
     game.setMallenPower(mallenPower);        // keep the difficulty setting across a reset
     game.setPresentRate(presentRate);        // keep the present-frequency setting across a reset
-    for (const ws of sockets.values()) { try { ws.close(); } catch {} } // kick clients to rejoin fresh
+    // detach the per-socket close handlers BEFORE closing so they don't race
+    // against the freshly-constructed game (otherwise a closing socket would
+    // call game.removePlayer with a stale id against the new Game instance).
+    for (const ws of sockets.values()) {
+      try { ws.removeAllListeners('close'); ws.close(); } catch {}
+    }
     sockets.clear();
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('server reset — players must refresh to rejoin');
@@ -86,8 +91,11 @@ const httpServer = http.createServer((req, res) => {
   }
   if (urlPath === '/admin') urlPath = '/admin.html';
   if (urlPath === '/') urlPath = '/index.html';
-  const filePath = path.join(CLIENT_DIR, path.normalize(urlPath));
-  if (!filePath.startsWith(CLIENT_DIR)) { res.writeHead(403); res.end(); return; }
+  const filePath = path.resolve(path.join(CLIENT_DIR, path.normalize(urlPath)));
+  // Suffix with a separator so a sibling like "C:\...\client-secrets" doesn't
+  // pass the startsWith check; allow the exact CLIENT_DIR too.
+  const clientPrefix = CLIENT_DIR.endsWith(path.sep) ? CLIENT_DIR : CLIENT_DIR + path.sep;
+  if (filePath !== CLIENT_DIR && !filePath.startsWith(clientPrefix)) { res.writeHead(403); res.end(); return; }
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('not found'); return; }
     const ext = path.extname(filePath);
@@ -129,6 +137,7 @@ wss.on('connection', (ws) => {
       const now = game._clock || 0;
       switch (m.type) {
         case MSG.JOIN: {
+          if (playerId) break;     // ignore duplicate JOIN on the same socket
           const name = (m.name || 'delivery').toString().slice(0, 16);
           const colors = {
             shirt:  typeof m.shirtColor  === 'string' ? m.shirtColor  : null,
@@ -189,9 +198,22 @@ const heartbeat = setInterval(() => {
 }, 15000);
 wss.on('close', () => clearInterval(heartbeat));
 
+// graceful shutdown — stop the heartbeat + tick + WS server so the process
+// can exit cleanly instead of being held open by the intervals.
+const tickHandles = [];
+function shutdown() {
+  try { clearInterval(heartbeat); } catch {}
+  for (const h of tickHandles) { try { clearInterval(h); } catch {} }
+  try { wss.close(); } catch {}
+  try { httpServer.close(() => process.exit(0)); } catch { process.exit(0); }
+  setTimeout(() => process.exit(0), 1500).unref();   // hard exit if close hangs
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
 // --- tick loop --------------------------------------------------------------
 let last = Date.now();
-setInterval(() => {
+tickHandles.push(setInterval(() => {
   // One bad tick must not crash the server and kick all 12 players.
   try {
     const now = Date.now();
@@ -215,7 +237,7 @@ setInterval(() => {
   } catch (err) {
     console.error('tick error:', err);
   }
-}, TICK_MS);
+}, TICK_MS));
 
 // Non-internal IPv4 addresses, so you can open the game from a phone on the LAN.
 function lanAddresses() {

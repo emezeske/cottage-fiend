@@ -416,9 +416,20 @@ function connect(name) {
     }
   };
   ws.onclose = () => {
-    // Auto-reconnect: a Wi-Fi blip or the phone backgrounding shouldn't kick you
-    // for good. Keep retrying (~30s) and rejoin with the same name; only fall back
-    // to the manual-refresh overlay if the server is truly gone.
+    // Reset any client-side audio loop / state that won't survive a fresh
+    // session — otherwise the local invincibility / dance themes can wedge as
+    // "playing" after a reconnect even though their source nodes were torn
+    // down with the old context. Also drop the old ws so a slow GC doesn't
+    // hold a reference to ten dead sockets.
+    if (invLoopOn)   { try { stopLoop('invincible_theme'); } catch {}; invLoopOn = false; }
+    if (danceLoopOn) { try { stopLoop('dance_party_theme'); } catch {}; danceLoopOn = false; }
+    try { duckMusic(false); } catch {}
+    ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
+    ws = null;
+    // Auto-reconnect: a Wi-Fi blip or the phone backgrounding shouldn't kick
+    // you for good. Cap retries so we don't reconnect-spam if the server is
+    // permanently gone — reconnectAttempts is only zeroed by a SUCCESSFUL
+    // onopen below (NOT by reaching here), so the cap actually holds.
     if (reconnectAttempts < 30) {
       reconnectAttempts++;
       setTimeout(() => connect(playerName), 1000);
