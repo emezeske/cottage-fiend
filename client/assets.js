@@ -79,11 +79,12 @@ export function loadAssets() {
 // vest replacement.
 const VEST_H_LO = 10,  VEST_H_HI = 45;
 const PANTS_H_LO = 195, PANTS_H_HI = 245;
-// Skin shadows on the face come out cool-blue (same hue family as the hat) at
-// moderate saturation. The real hat / pants pixels are very saturated (~0.92
-// per sampling), so a higher pants threshold lets us tint the hat without
-// sweeping up the blueish skin-shadow pixels.
-const VEST_S_MIN  = 0.40;
+// Skin shares the vest's warm hue family (orange-brown) and skin shadows share
+// the hat's cool-blue hue family. The actual cloth regions are very saturated
+// (vest S~0.89, hat S~0.92), while skin tops out around S~0.55 even in tinted
+// highlights. A symmetric S>=0.65 floor cleanly separates cloth from flesh in
+// BOTH bands without touching face / forearms.
+const VEST_S_MIN  = 0.65;
 const PANTS_S_MIN = 0.65;
 const TINT_V_MIN  = 0.15;
 
