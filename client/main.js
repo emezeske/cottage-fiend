@@ -28,7 +28,7 @@ const adSkip = document.getElementById('adSkip');
 const customize = document.getElementById('customize');
 const customizeTitle = document.getElementById('customizeTitle');
 const previewCanvas = document.getElementById('previewCanvas');
-const vestColor = document.getElementById('vestColor');
+const shirtColor = document.getElementById('shirtColor');
 const pantsColor = document.getElementById('pantsColor');
 const mallenColor = document.getElementById('mallenColor');
 const pantsPicker = document.getElementById('pantsPicker');
@@ -307,12 +307,12 @@ function _loadColor(colorKey, hueKey) {
   return hueToHex(Math.floor(Math.random() * 360));
 }
 let playerColors = {
-  vest:   _loadColor('cf_vest_color',   'cf_vest_hue'),
+  shirt:   _loadColor('cf_shirt_color',   'cf_shirt_hue'),
   pants:  _loadColor('cf_pants_color',  'cf_pants_hue'),
   mallen: _loadColor('cf_mallen_color', 'cf_mallen_hue'),
 };
 // persist the seed colors so a refresh before pressing READY keeps the look
-localStorage.setItem('cf_vest_color',   playerColors.vest);
+localStorage.setItem('cf_shirt_color',   playerColors.shirt);
 localStorage.setItem('cf_pants_color',  playerColors.pants);
 localStorage.setItem('cf_mallen_color', playerColors.mallen);
 
@@ -324,7 +324,7 @@ function connect(name) {
     ws.send(JSON.stringify({
       type: MSG.JOIN,
       name: playerName,
-      vestColor:   playerColors.vest,
+      shirtColor:   playerColors.shirt,
       pantsColor:  playerColors.pants,
       mallenColor: playerColors.mallen,
     }));
@@ -626,10 +626,10 @@ function showCustomizeScreen(name) {
   customizeTitle.textContent = `${name}, customize your character`;
   _pendingMallen = name.trim().toLowerCase() === 'mallen';
   pantsPicker.style.display = _pendingMallen ? 'none' : '';
-  vestColor.parentElement.style.display = _pendingMallen ? 'none' : '';
+  shirtColor.parentElement.style.display = _pendingMallen ? 'none' : '';
   mallenPicker.style.display = _pendingMallen ? '' : 'none';
   // hydrate pickers from saved hex
-  vestColor.value   = playerColors.vest;
+  shirtColor.value   = playerColors.shirt;
   pantsColor.value  = playerColors.pants;
   mallenColor.value = playerColors.mallen;
   _previewFrame = 0;
@@ -647,7 +647,7 @@ function drawPreview() {
   pctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
   const sprite = _pendingMallen
     ? getMallenSprite(mallenColor.value, false, 's', _previewFrame)
-    : getDeliverySprite(vestColor.value, pantsColor.value, 's', _previewFrame);
+    : getDeliverySprite(shirtColor.value, pantsColor.value, 's', _previewFrame);
   if (sprite) {
     const s = previewCanvas.width;
     pctx.drawImage(sprite, 0, 0, s, s);
@@ -656,22 +656,22 @@ function drawPreview() {
 // live update + persist on every color tweak so a refresh before READY keeps the look
 function _onPickerChange() {
   playerColors = {
-    vest: vestColor.value, pants: pantsColor.value, mallen: mallenColor.value,
+    shirt: shirtColor.value, pants: pantsColor.value, mallen: mallenColor.value,
   };
-  localStorage.setItem('cf_vest_color',   playerColors.vest);
+  localStorage.setItem('cf_shirt_color',   playerColors.shirt);
   localStorage.setItem('cf_pants_color',  playerColors.pants);
   localStorage.setItem('cf_mallen_color', playerColors.mallen);
   drawPreview();
 }
-vestColor.addEventListener('input',   _onPickerChange);
+shirtColor.addEventListener('input',   _onPickerChange);
 pantsColor.addEventListener('input',  _onPickerChange);
 mallenColor.addEventListener('input', _onPickerChange);
 
 readyBtn.onclick = () => {
   playerColors = {
-    vest: vestColor.value, pants: pantsColor.value, mallen: mallenColor.value,
+    shirt: shirtColor.value, pants: pantsColor.value, mallen: mallenColor.value,
   };
-  localStorage.setItem('cf_vest_color',   playerColors.vest);
+  localStorage.setItem('cf_shirt_color',   playerColors.shirt);
   localStorage.setItem('cf_pants_color',  playerColors.pants);
   localStorage.setItem('cf_mallen_color', playerColors.mallen);
   hideCustomizeScreen();

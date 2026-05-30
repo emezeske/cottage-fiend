@@ -77,16 +77,14 @@ export function loadAssets() {
 // H~26 S~0.89, blue pants/hat at H~220 S~0.92, and skin sits at the same
 // hue as brown but S~0.10 — so S>=0.40 cleanly excludes skin from the
 // vest replacement.
-// HONEST limitation: the artist used warm vest brown and skin tones that
-// occupy nearly the same hue family; the forearms can't be cleanly told apart
-// from the vest by color alone. Compromise: narrow hue bands + saturation
-// floor + cap brightness on the vest band so the brightest warm pixels
-// (mostly skin highlights) are left alone. Vest mid-tones still tint.
-const VEST_H_LO = 20,  VEST_H_HI = 42;
+// We tint the white SHIRT and the blue HAT/PANTS, not the brown vest. White is
+// trivially separable from everything else in the sprite — it sits at very low
+// saturation (S<=0.06) and very high value (V>=0.79) across every direction,
+// with no skin or cloth pixels intruding. Cool-blue pants are isolated by hue.
+const SHIRT_S_MAX = 0.10;
+const SHIRT_V_MIN = 0.70;
 const PANTS_H_LO = 200, PANTS_H_HI = 238;
-const VEST_S_MIN  = 0.65;
-const PANTS_S_MIN = 0.55;     // pants need a looser floor — bumping it leaves un-tinted edges
-const VEST_V_MAX  = 0.58;     // excludes bright skin highlights; trims the brightest vest spots too
+const PANTS_S_MIN = 0.55;
 const TINT_V_MIN  = 0.15;
 
 function rgbToHsv(r, g, b) {
@@ -132,18 +130,20 @@ export function hexToHue(hex) {
 // vs bright red vs pink in the picker actually gives you different vests.
 // Source brightness variation is preserved as a scale relative to the band's
 // reference V so highlights / shadows survive the swap.
-const REF_V = 0.55;                      // ~midpoint of source vest V; pants slightly darker
+// Reference Vs for the brightness-scaling step (source pixel V is scaled by
+// target V / refV). Sampled from delivery_s_0: shirt ~0.82, pants ~0.40.
+const SHIRT_REF_V = 0.82;
 const PANTS_REF_V = 0.40;
 
 const _spriteCache = new Map();
-export function getDeliverySprite(vestHex, pantsHex, dir, frame) {
-  const v = normalizeHex(vestHex), p = normalizeHex(pantsHex);
-  const key = `${v}|${p}|${dir}|${frame}`;
+export function getDeliverySprite(shirtHex, pantsHex, dir, frame) {
+  const s = normalizeHex(shirtHex), p = normalizeHex(pantsHex);
+  const key = `${s}|${p}|${dir}|${frame}`;
   let canvas = _spriteCache.get(key);
   if (canvas) return canvas;
   const src = images[`delivery_${dir}_${frame}`];
   if (!src) return null;
-  canvas = recolorDelivery(src, hexToHsv(v), hexToHsv(p));
+  canvas = recolorDelivery(src, hexToHsv(s), hexToHsv(p));
   _spriteCache.set(key, canvas);
   return canvas;
 }
@@ -173,7 +173,7 @@ function hexToHsv(hex) {
   return rgbToHsv(r, g, b);
 }
 
-function recolorDelivery(srcImg, vestHsv, pantsHsv) {
+function recolorDelivery(srcImg, shirtHsv, pantsHsv) {
   const w = srcImg.naturalWidth || srcImg.width;
   const h = srcImg.naturalHeight || srcImg.height;
   const c = document.createElement('canvas');
@@ -182,20 +182,20 @@ function recolorDelivery(srcImg, vestHsv, pantsHsv) {
   ctx.drawImage(srcImg, 0, 0);
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
-  const [vH, vS, vV] = vestHsv;
+  const [sH, sS, sV] = shirtHsv;
   const [pH, pS, pV] = pantsHsv;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] < 16) continue;
     const [hue, sat, val] = rgbToHsv(d[i], d[i + 1], d[i + 2]);
     if (val < TINT_V_MIN) continue;
     let tH, tS, tRef;
-    if (hue >= VEST_H_LO && hue <= VEST_H_HI && sat >= VEST_S_MIN && val <= VEST_V_MAX) {
-      tH = vH; tS = vS; tRef = vV / REF_V;
+    // SHIRT band: very white pixels — no hue requirement.
+    if (sat <= SHIRT_S_MAX && val >= SHIRT_V_MIN) {
+      tH = sH; tS = sS; tRef = sV / SHIRT_REF_V;
+    // PANTS / HAT band: cool blue cloth.
     } else if (hue >= PANTS_H_LO && hue <= PANTS_H_HI && sat >= PANTS_S_MIN) {
       tH = pH; tS = pS; tRef = pV / PANTS_REF_V;
     } else continue;
-    // newV scales source V by (targetV / refV) — picker's brightness governs
-    // the overall lightness of the band while source shading variation is kept.
     const newV = Math.min(1, Math.max(0, val * tRef));
     const [r, g, b] = hsvToRgb(tH, tS, newV);
     d[i] = r; d[i + 1] = g; d[i + 2] = b;

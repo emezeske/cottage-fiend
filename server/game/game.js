@@ -131,7 +131,7 @@ export class Game {
     const isHex = (s) => typeof s === 'string' && /^#[0-9a-fA-F]{6}$/.test(s);
     const normHex = (h, fallback) => (isHex(h) ? h.toLowerCase() : fallback);
     const defH = (id * 53) % 360;
-    const vestColor   = normHex(colors && colors.vest,   _hsvDefault(defH));
+    const shirtColor  = normHex(colors && colors.shirt,  _hsvDefault(defH));
     const pantsColor  = normHex(colors && colors.pants,  _hsvDefault((defH + 180) % 360));
     const mallenColor = normHex(colors && colors.mallen, '#cd2a2a');
     const p = {
@@ -148,7 +148,7 @@ export class Game {
       chargeStartMs: 0,
       aim: null,                  // twin-stick: thrown direction during a charge (else uses .dir)
       hitsTaken: 0,               // toward dropping a tub
-      vestColor, pantsColor, mallenColor,  // player-chosen sprite tints (hex #RRGGBB)
+      shirtColor, pantsColor, mallenColor,  // player-chosen sprite tints (hex #RRGGBB)
       // mallen-only:
       eaten: 0,
       frenzyMs: 0,
@@ -1408,7 +1408,7 @@ export class Game {
         danceParty: (this._clock || 0) < p.danceUntilMs || (this._clock || 0) < p.dancePartyHostUntilMs,
         dashing: (this._clock || 0) < p.dashUntilMs,
         spriteIndex: p.spriteIndex,
-        vestColor: p.vestColor, pantsColor: p.pantsColor, mallenColor: p.mallenColor,
+        shirtColor: p.shirtColor, pantsColor: p.pantsColor, mallenColor: p.mallenColor,
         effect: p.effect,
         effectMs: p.effect ? Math.max(0, Math.round(p.effectUntilMs - (this._clock || 0))) : 0,
       })),

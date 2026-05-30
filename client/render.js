@@ -470,7 +470,7 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
     for (const p of players) {
       if (p.id === selfId) continue;
       if (p.isMallen) edgeArrow(ctx, cssW, cssH, p, p.mallenColor || '#cd2a2a', '👹', 16);
-      else edgeArrow(ctx, cssW, cssH, p, p.vestColor || '#cd3c34', null, 11);
+      else edgeArrow(ctx, cssW, cssH, p, p.shirtColor || '#ffffff', null, 11);
     }
     // bigger nav arrow to your current objective (truck or fridge), so it stands out
     if (loci && self) {
@@ -633,7 +633,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
   // cover legacy snapshots that don't yet carry the per-player hues.
   let img;
   if (p.isMallen) img = getMallenSprite(p.mallenColor || '#cd2a2a', p.frenzy, dir, f);
-  else            img = getDeliverySprite(p.vestColor || '#cd3c34', p.pantsColor || '#3a6ecd', dir, f);
+  else            img = getDeliverySprite(p.shirtColor || '#ffffff', p.pantsColor || '#3a6ecd', dir, f);
   // 2X SPEED turns you into a zooming Ferrari (directional car sprite). The Mallen
   // becomes a car too — but reverts to his normal monster self while in a frenzy.
   const car = (p.effect === 'double_speed' && !(p.isMallen && p.frenzy)) ? images[`ferrari_${carDir}`] : null;
@@ -678,7 +678,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
 
   // facing arrow at the feet (color-coded) — shows your current punch/throw direction
   {
-    const col = p.isMallen ? (p.mallenColor || '#cd2a2a') : (p.vestColor || '#cd3c34');
+    const col = p.isMallen ? (p.mallenColor || '#cd2a2a') : (p.shirtColor || '#ffffff');
     ctx.save();
     ctx.translate(p.x, p.y + p.radius);
     ctx.rotate(Math.atan2(faceDir.y, faceDir.x));
@@ -1006,7 +1006,7 @@ function drawMinimap(ctx, x, y, size, state) {
   }
   for (const p of state.players || []) {
     if (p.isMallen) dot(p.x, p.y, 3.6, p.mallenColor || '#cd2a2a');
-    else dot(p.x, p.y, 2, p.vestColor || '#cd3c34');               // players (small)
+    else dot(p.x, p.y, 2, p.shirtColor || '#ffffff');               // players (small)
   }
 }
 

@@ -131,7 +131,7 @@ wss.on('connection', (ws) => {
         case MSG.JOIN: {
           const name = (m.name || 'delivery').toString().slice(0, 16);
           const colors = {
-            vest:   typeof m.vestColor   === 'string' ? m.vestColor   : null,
+            shirt:  typeof m.shirtColor  === 'string' ? m.shirtColor  : null,
             pants:  typeof m.pantsColor  === 'string' ? m.pantsColor  : null,
             mallen: typeof m.mallenColor === 'string' ? m.mallenColor : null,
           };
