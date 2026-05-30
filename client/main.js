@@ -713,13 +713,11 @@ const colorPicker = (() => {
   const hue       = document.getElementById('cpHue');
   const preview   = document.getElementById('cpPreview');
   const hexLabel  = document.getElementById('cpHex');
-  const cancelBtn = document.getElementById('cpCancel');
   const okBtn     = document.getElementById('cpOk');
   const svCtx     = sv.getContext('2d');
   const hueCtx    = hue.getContext('2d');
 
   let target = null;
-  let originalHex = '#ffffff';
   let hsv = { h: 0, s: 1, v: 1 };
 
   function drawSV() {
@@ -794,14 +792,6 @@ const colorPicker = (() => {
   bindDrag(sv, pointerToSV);
   bindDrag(hue, pointerToHue);
 
-  cancelBtn.addEventListener('click', () => {
-    if (target) {
-      _setSwatch(target, originalHex);
-      target.dispatchEvent(new CustomEvent('input'));
-    }
-    modal.style.display = 'none';
-    target = null;
-  });
   okBtn.addEventListener('click', () => {
     modal.style.display = 'none';
     target = null;
@@ -810,8 +800,7 @@ const colorPicker = (() => {
   return {
     open(swatch) {
       target = swatch;
-      originalHex = swatch.value || '#ffffff';
-      const rgb = _hexToRgb(originalHex);
+      const rgb = _hexToRgb(swatch.value || '#ffffff');
       hsv = _rgbToHsv(rgb.r, rgb.g, rgb.b);
       // A neutral gray has no defined hue — keep whatever hsv.h was set to
       // (it'll be 0 from rgbToHsv) so the SV plane has a basis to draw.
