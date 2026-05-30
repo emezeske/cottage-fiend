@@ -181,6 +181,9 @@
       background: rgba(0, 0, 0, 0.12);
       cursor: pointer;
       touch-action: manipulation;
+      display: none;                /* hidden by default — the JOIN tap (a real
+                                       user gesture) is what unlocks iOS audio.
+                                       Only shown as a fallback if that fails. */
     }
 
     /* forced ad-break debuff: a full-screen interstitial. Stacks the badge ABOVE

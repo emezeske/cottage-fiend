@@ -53,18 +53,30 @@ let invLoopOn = false; // is the local invincibility theme looping
 let danceLoopOn = false; // is the local dance-party theme looping
 const PREVIEW = new URLSearchParams(location.search).get('preview'); // admin screen preview
 
-function hideAudioUnlockModal() {
-  audioUnlockModal.hidden = true;
+// Single audio-unlock entry point — call from any user gesture (joinBtn, title
+// overlay tap, keypress). On iOS, the AudioContext must be resumed AND a real
+// <audio> element must play during the gesture; doing both here covers every
+// path. The fullscreen modal is now a fallback only (hidden by default).
+let _audioUnlocked = false;
+function unlockAudio() {
+  if (_audioUnlocked) return;
+  _audioUnlocked = true;
+  initAudio();
+  try {
+    audioUnlockPlayer.currentTime = 0;
+    const p = audioUnlockPlayer.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch {}
+  audioUnlockModal.style.display = 'none';
 }
-
+function hideAudioUnlockModal() {
+  audioUnlockModal.style.display = 'none';
+}
+// keep the modal click as a backup if it ever ends up shown
 audioUnlockModal.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  audioUnlockPlayer.currentTime = 0;
-  const p = audioUnlockPlayer.play();
-  if (p && typeof p.catch === 'function') p.catch(() => {});
-  initAudio();
-  hideAudioUnlockModal();
+  unlockAudio();
 }, { once: true });
 
 // Forced ad-break debuff: a full-screen interstitial whose SKIP button stays
@@ -635,7 +647,7 @@ if (_savedName) nameInput.value = _savedName.slice(0, 16);
 joinBtn.onclick = () => {
   const name = nameInput.value.trim().slice(0, 16);
   if (!name) { nameInput.focus(); return; }
-  initAudio();
+  unlockAudio();          // joinBtn IS a user gesture — kick off iOS audio unlock from here
   fitCanvas();
   localStorage.setItem('cf_name', name);
   showCustomizeScreen(name);
@@ -715,12 +727,12 @@ let audioPrimed = false;
 function primeTitleAudio() {
   if (audioPrimed) return;
   audioPrimed = true;
-  initAudio();
+  unlockAudio();
   setMusic('title');
 }
 overlay.addEventListener('pointerdown', primeTitleAudio);
 nameInput.addEventListener('keydown', primeTitleAudio);
-goBtn.onclick = () => { initAudio(); send(MSG.READY); };
+goBtn.onclick = () => { unlockAudio(); send(MSG.READY); };
 
 let lastActionMode = null;
 let baseActionColor = '#ff6b5d';
