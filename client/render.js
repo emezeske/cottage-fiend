@@ -250,6 +250,39 @@ function drawGoldenCurds(ctx, state) {
   }
 }
 
+// TOTAL BUMMER: -1 POINT floating text mirrored from the golden-curd "+1 POINT"
+// rise-and-fade. No special cloud / sprite — the player keeps the usual jittery
+// stun visuals (that part IS the punishment); we just add the text overlay.
+const BUMMER_MS = 3000;
+const bummers = [];
+export function addBummer(id) { bummers.push({ id, t0: performance.now() }); }
+function drawBummers(ctx, state) {
+  const now = performance.now();
+  const players = (state && state.players) || [];
+  for (let i = bummers.length - 1; i >= 0; i--) {
+    const b = bummers[i];
+    const elapsed = now - b.t0;
+    if (elapsed >= BUMMER_MS) { bummers.splice(i, 1); continue; }
+    const p = players.find(pp => pp.id === b.id);
+    if (!p) continue;
+    const t = elapsed / BUMMER_MS;
+    // text rises and fades over the last 40% (same timing as +1 POINT)
+    if (t < 0.6) continue;
+    const tt = (t - 0.6) / 0.4;
+    const cx = p.x;
+    const ty = p.y - 80 - tt * 70;     // rise above the player
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - tt);
+    ctx.font = '900 38px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 6; ctx.strokeStyle = '#1e1814';
+    ctx.fillStyle = '#ff5c75';
+    ctx.strokeText('-1 POINT', cx, ty);
+    ctx.fillText('-1 POINT', cx, ty);
+    ctx.restore();
+  }
+}
+
 function drawConfetti(ctx) {
   for (let i = confetti.length - 1; i >= 0; i--) {
     const c = confetti[i];
@@ -456,6 +489,7 @@ export function render(ctx, canvas, state, selfId, charge, nukeAim) {
   drawBams(ctx);
   drawPoofs(ctx);
   drawGoldenCurds(ctx, state);   // golden-curd celebration, on top of the world
+  drawBummers(ctx, state);       // TOTAL BUMMER: floating "-1 POINT" above the victim
 
   if (charge && charge.active) drawChargeArc(ctx, charge);
 

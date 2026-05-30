@@ -724,6 +724,14 @@ export class Game {
       this._spawnPortalPair(p, now);
       p.portalCooldownUntilMs = Math.max(p.portalCooldownUntilMs, now + PORTAL.teleportCooldownMs);
       this.events.push({ type: 'portal', x: p.x, y: p.y });
+    } else if (fx === FX.TOTAL_BUMMER) {
+      // Invincibility shrugs the whole thing off (matches every other "I get
+      // hit by a bad thing" interaction in the game).
+      if (p.effect === FX.INVINCIBLE) return;
+      if (p.isMallen) p.eaten = Math.max(0, p.eaten - 1);
+      else            p.score = Math.max(0, p.score - 1);
+      this._stunPlayer(p, now, EFFECT.bummerMs);     // drops tub + the usual jittery stun visuals
+      this.events.push({ type: 'totalBummer', x: p.x, y: p.y, id: p.id });
     } else if (fx === FX.NUKE) {
       // Arm a nuke: the claimer aims via the right joystick (client-only reticle)
       // and the LAUNCH commits a target. Track the arm via the effect so the HUD

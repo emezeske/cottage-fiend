@@ -1029,6 +1029,61 @@ test('catch-up bias: Mallen is included via normalized progress (eaten / mallenE
   assert.ok(bias2 < -0.5, `Mallen way ahead should get a strong negative bias, got ${bias2}`);
 });
 
+test('total bummer: stuns + subtracts a point + emits a global event', () => {
+  assert.ok(DEBUFF_POOL.some(e => e.fx === FX.TOTAL_BUMMER), 'total bummer is a debuff');
+  assert.ok(ONE_SHOT.has(FX.TOTAL_BUMMER), 'total bummer is one-shot');
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  p.score = 5;
+  giveTub(g, id);
+  assert.notEqual(p.carryingTubId, null);
+  g._applyOneShot(p, FX.TOTAL_BUMMER, g._clock);
+  assert.equal(p.score, 4, 'lost a point');
+  assert.ok(p.stunnedUntilMs > g._clock, 'stunned');
+  assert.equal(p.carryingTubId, null, 'stun dropped the tub');
+  assert.ok(g.events.some((e) => e.type === 'totalBummer' && e.id === id),
+            'global totalBummer event fired');
+});
+
+test('total bummer: clamps score at zero (no negatives)', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  p.score = 0;
+  g._applyOneShot(p, FX.TOTAL_BUMMER, g._clock);
+  assert.equal(p.score, 0, 'score stays at 0, never goes negative');
+});
+
+test('total bummer: Mallen loses an eaten count (also clamped to 0)', () => {
+  const g = newGame();
+  g.addPlayer('crew');
+  const mid = g.addPlayer('mallen');
+  g.startRound(); advance(g, 3200);
+  const m = g.players.get(mid);
+  m.eaten = 3;
+  g._applyOneShot(m, FX.TOTAL_BUMMER, g._clock);
+  assert.equal(m.eaten, 2, 'Mallen lost an eaten');
+  m.eaten = 0;
+  g._applyOneShot(m, FX.TOTAL_BUMMER, g._clock);
+  assert.equal(m.eaten, 0, 'Mallen eaten clamped at 0');
+});
+
+test('total bummer: invincible players shrug it off (no stun, no point loss)', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice');
+  g.startRound(); advance(g, 3200);
+  const p = g.players.get(id);
+  p.score = 5;
+  p.effect = FX.INVINCIBLE; p.effectUntilMs = g._clock + 6000;
+  const before = p.stunnedUntilMs;
+  g._applyOneShot(p, FX.TOTAL_BUMMER, g._clock);
+  assert.equal(p.score, 5, 'invincible kept their point');
+  assert.equal(p.stunnedUntilMs, before, 'invincible was not stunned');
+});
+
 test('catch-up bias: setPresentBias clamps to [0, 1.0]', () => {
   const g = newGame();
   g.addPlayer('a');

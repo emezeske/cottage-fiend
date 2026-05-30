@@ -37,6 +37,7 @@ const SFX_FILES = {
   pinata: 'sfx_pinata.mp3',
   interstitial: 'sfx_interstitial.mp3', // local: forced ad-break debuff jingle
   golden_curd: 'sfx_golden_curd.mp3', // global: golden-curd celebration fanfare
+  total_bummer: 'sfx_bummer.mp3',     // global: TOTAL BUMMER debuff trigger ("dun dun duuun")
   dunk: 'sfx_dunk.mp3', // local: you scored by THROWING a tub into the fridge (carried delivery uses 'score')
   // portal claim: one of these three plays at random (see picker in main.js)
   portal_0: 'sfx_portal_0.mp3',

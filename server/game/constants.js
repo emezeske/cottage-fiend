@@ -162,6 +162,7 @@ export const EFFECT = {
   bananaSpeedMult: 1.4,     // 'slidey' also boosts top speed so you get more chaos out of less control
   interstitialMs: 3000,     // forced ad-break debuff: you're stunned this long while the skip timer counts down
   goldenCurdMs: 3000,       // golden-curd buff: brief freeze while the celebration plays (also the client anim length)
+  bummerMs: 3000,           // TOTAL BUMMER debuff: stun length AND client anim length
 };
 
 // Effect ids. Server-authoritative unless noted CLIENT (input/render only).
@@ -187,6 +188,7 @@ export const FX = {
   DANCE_PARTY: 'dance_party',    // buff: nearby players are forced to dance (stunned) while music plays
   PORTAL: 'portal',              // one-shot buff: spawns a paired portal at the claimer + a random spot
   NUKE: 'nuke',                  // armed-state buff: aim with right stick, release to launch a 3s nuke
+  TOTAL_BUMMER: 'total_bummer',  // one-shot debuff: stun + lose a point (crew score / Mallen eaten)
 };
 
 // Nuclear launch buff: claiming arms a nuke. The thrower uses the right joystick
@@ -279,6 +281,7 @@ export const DEBUFF_POOL = [
   { fx: FX.BLINDNESS,  w: 2 },
   { fx: FX.BANANA,     w: 2 },
   { fx: FX.INTERSTITIAL, w: 2 },
+  { fx: FX.TOTAL_BUMMER, w: 2 },
 ];
 export const WILDCARD_POOL = [
   { fx: FX.SWAP,    w: 1 },
@@ -294,6 +297,6 @@ export const MALLEN_DEBUFF_POOL = DEBUFF_POOL.filter((e) => e.fx !== FX.GREASED)
 export const MALLEN_WILDCARD_POOL = WILDCARD_POOL.filter((e) => e.fx !== FX.PINATA);
 
 // One-shot effects (applied instantly, no active duration).
-export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK, FX.DANCE_PARTY, FX.PORTAL, FX.NUKE]);
+export const ONE_SHOT = new Set([FX.EXPLOSION, FX.SWAP, FX.PINATA, FX.INTERSTITIAL, FX.GOLDEN_CURD, FX.CORGI_ATTACK, FX.DANCE_PARTY, FX.PORTAL, FX.NUKE, FX.TOTAL_BUMMER]);
 // Client-only effects (server still tracks them so the client can read its own).
 export const CLIENT_FX = new Set([FX.BACKWARDS, FX.BLINDNESS]);

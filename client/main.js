@@ -2,7 +2,7 @@
 
 import { loadAssets, getDeliverySprite, getMallenSprite, hueToHex, hexToHue, images } from './assets.js';
 import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
-import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addCurdBurst, addNukeExplosion, AD_H } from './render.js';
+import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addBummer, addCurdBurst, addNukeExplosion, AD_H } from './render.js';
 
 const MSG = {
   JOIN: 'join', INPUT: 'input', PICKUP: 'pickup', CHARGE: 'charge',
@@ -413,6 +413,8 @@ function connect(name) {
         if (e.type === 'dominating' && e.id === selfId) playSound('dominating'); // you're 5+ ahead
         // golden curd: a global celebration — everyone sees the animation and hears it
         if (e.type === 'presentClaim' && e.fx === 'golden_curd') { playSound('golden_curd'); addGoldenCurd(e.id); }
+        // total bummer: also a global moment — everyone sees the "-1 POINT" + hears it
+        else if (e.type === 'presentClaim' && e.fx === 'total_bummer') { playSound('total_bummer'); addBummer(e.id); }
         else if (e.type === 'presentClaim' && e.id === selfId) {
           // portal claim picks one of three random portal SFX
           const name = e.fx === 'portal' ? `portal_${(Math.random() * 3) | 0}` : e.fx;
