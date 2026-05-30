@@ -285,6 +285,17 @@
       font-weight: 700;
       font-size: 14px;
     }
+    #shapeSliders {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      align-items: center;
+      width: min(320px, 92vw);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    #shapeSliders label { text-align: right; letter-spacing: 0.5px; }
+    #shapeSliders input[type="range"] { width: 100%; touch-action: none; }
     /* Global "Nuclear launch detected." banner shown for ~3s when a nuke launches.
        Positioned above the thumb buttons (joystick/action sit at bottom: 28px + ~110px tall). */
     #nukeBanner {
@@ -412,6 +423,12 @@
       <label class="picker">SHIRT <button type="button" class="swatch" id="shirtColor" data-color="#ffffff"></button></label>
       <label class="picker" id="pantsPicker">HAT &amp; PANTS <button type="button" class="swatch" id="pantsColor" data-color="#3a6ecd"></button></label>
       <label class="picker" id="mallenPicker" style="display:none;">MALLEN <button type="button" class="swatch" id="mallenColor" data-color="#cd3c34"></button></label>
+    </div>
+    <div id="shapeSliders">
+      <label for="bodyW">WIDTH</label>     <input type="range" id="bodyW"     min="0.6" max="1.4" step="0.05" value="1" />
+      <label for="bodyH">HEIGHT</label>    <input type="range" id="bodyH"     min="0.7" max="1.4" step="0.05" value="1" />
+      <label for="headScale">HEAD</label>  <input type="range" id="headScale" min="0.5" max="1.8" step="0.05" value="1" />
+      <label for="feetScale">FEET</label>  <input type="range" id="feetScale" min="0.5" max="1.8" step="0.05" value="1" />
     </div>
     <button id="readyBtn">READY TO PLAY!</button>
   </div>

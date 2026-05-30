@@ -2,7 +2,7 @@
 
 import { loadAssets, getDeliverySprite, getMallenSprite, hueToHex, hexToHue, images } from './assets.js';
 import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
-import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addBummer, addCurdBurst, addNukeExplosion, AD_H } from './render.js';
+import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addBummer, addCurdBurst, addNukeExplosion, AD_H, drawDeliveryBody } from './render.js';
 
 const MSG = {
   JOIN: 'join', INPUT: 'input', PICKUP: 'pickup', CHARGE: 'charge',
@@ -33,6 +33,11 @@ const pantsColor = document.getElementById('pantsColor');
 const mallenColor = document.getElementById('mallenColor');
 const pantsPicker = document.getElementById('pantsPicker');
 const mallenPicker = document.getElementById('mallenPicker');
+const shapeSliders = document.getElementById('shapeSliders');
+const bodyWSlider     = document.getElementById('bodyW');
+const bodyHSlider     = document.getElementById('bodyH');
+const headScaleSlider = document.getElementById('headScale');
+const feetScaleSlider = document.getElementById('feetScale');
 const readyBtn = document.getElementById('readyBtn');
 const nukeBanner = document.getElementById('nukeBanner');
 let _nukeBannerTimer = null;
@@ -340,6 +345,18 @@ localStorage.setItem('cf_shirt_color',   playerColors.shirt);
 localStorage.setItem('cf_pants_color',  playerColors.pants);
 localStorage.setItem('cf_mallen_color', playerColors.mallen);
 
+// Delivery body proportions. Mallen ignores these — his sprite renders unscaled.
+function _loadShape(key, def) {
+  const n = Number(localStorage.getItem(key));
+  return Number.isFinite(n) && n > 0 ? n : def;
+}
+let playerShape = {
+  bodyW:     _loadShape('cf_body_w',      1),
+  bodyH:     _loadShape('cf_body_h',      1),
+  headScale: _loadShape('cf_head_scale',  1),
+  feetScale: _loadShape('cf_feet_scale',  1),
+};
+
 function connect(name) {
   playerName = name;
   ws = new WebSocket(wsUrl());
@@ -351,6 +368,7 @@ function connect(name) {
       shirtColor:   playerColors.shirt,
       pantsColor:  playerColors.pants,
       mallenColor: playerColors.mallen,
+      shape:       playerShape,
     }));
   };
   ws.onmessage = (ev) => {
@@ -831,10 +849,16 @@ function showCustomizeScreen(name) {
   pantsPicker.style.display = _pendingMallen ? 'none' : '';
   shirtColor.parentElement.style.display = _pendingMallen ? 'none' : '';
   mallenPicker.style.display = _pendingMallen ? '' : 'none';
+  // Body-shape sliders are delivery-only — Mallen renders his sprite unscaled.
+  shapeSliders.style.display = _pendingMallen ? 'none' : 'grid';
   // hydrate pickers from saved hex (keeps swatch background in sync)
   _setSwatch(shirtColor,  playerColors.shirt);
   _setSwatch(pantsColor,  playerColors.pants);
   _setSwatch(mallenColor, playerColors.mallen);
+  bodyWSlider.value     = playerShape.bodyW;
+  bodyHSlider.value     = playerShape.bodyH;
+  headScaleSlider.value = playerShape.headScale;
+  feetScaleSlider.value = playerShape.feetScale;
   _previewFrame = 0;
   drawPreview();
   if (_previewTimer) clearInterval(_previewTimer);
@@ -869,7 +893,7 @@ function drawPreview() {
   }
 
   const sprite = getDeliverySprite(shirtColor.value, pantsColor.value, 's', _previewFrame);
-  if (sprite) pctx.drawImage(sprite, 0, 0, W, W);
+  if (sprite) drawDeliveryBody(pctx, sprite, W / 2, W, W, playerShape);
 }
 // live update + persist on every color tweak so a refresh before READY keeps the look
 function _onPickerChange() {
@@ -884,6 +908,26 @@ function _onPickerChange() {
 shirtColor.addEventListener('input',   _onPickerChange);
 pantsColor.addEventListener('input',  _onPickerChange);
 mallenColor.addEventListener('input', _onPickerChange);
+
+// live update + persist body-shape sliders so the customize state survives a
+// refresh and a re-JOIN sends the latest proportions to the server.
+function _onShapeChange() {
+  playerShape = {
+    bodyW:     Number(bodyWSlider.value)     || 1,
+    bodyH:     Number(bodyHSlider.value)     || 1,
+    headScale: Number(headScaleSlider.value) || 1,
+    feetScale: Number(feetScaleSlider.value) || 1,
+  };
+  localStorage.setItem('cf_body_w',     String(playerShape.bodyW));
+  localStorage.setItem('cf_body_h',     String(playerShape.bodyH));
+  localStorage.setItem('cf_head_scale', String(playerShape.headScale));
+  localStorage.setItem('cf_feet_scale', String(playerShape.feetScale));
+  drawPreview();
+}
+bodyWSlider.addEventListener('input',     _onShapeChange);
+bodyHSlider.addEventListener('input',     _onShapeChange);
+headScaleSlider.addEventListener('input', _onShapeChange);
+feetScaleSlider.addEventListener('input', _onShapeChange);
 
 readyBtn.onclick = () => {
   playerColors = {

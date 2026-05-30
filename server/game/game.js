@@ -170,7 +170,7 @@ export class Game {
   }
 
   // ---- lifecycle ----------------------------------------------------------
-  addPlayer(name, colors) {
+  addPlayer(name, colors, shape) {
     const id = _nextId++;
     // Only ONE Mallen: a second person typing "mallen" joins as a normal delivery
     // player (otherwise they'd be a dead-weight character that can't eat/score/win).
@@ -185,6 +185,17 @@ export class Game {
     const shirtColor  = normHex(colors && colors.shirt,  _hsvDefault(defH));
     const pantsColor  = normHex(colors && colors.pants,  _hsvDefault((defH + 180) % 360));
     const mallenColor = normHex(colors && colors.mallen, '#cd2a2a');
+    // Body proportion sliders (delivery only — Mallen ignores these and renders
+    // unscaled). Validate to safe ranges; missing/garbage values fall back to 1.
+    const clampNum = (v, def, min, max) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return def;
+      return Math.max(min, Math.min(max, n));
+    };
+    const bodyW     = clampNum(shape && shape.bodyW,     1, 0.5, 1.6);
+    const bodyH     = clampNum(shape && shape.bodyH,     1, 0.5, 1.6);
+    const headScale = clampNum(shape && shape.headScale, 1, 0.4, 2.2);
+    const feetScale = clampNum(shape && shape.feetScale, 1, 0.4, 2.2);
     const p = {
       id, name,
       x: spawn.x, y: spawn.y,
@@ -200,6 +211,7 @@ export class Game {
       aim: null,                  // twin-stick: thrown direction during a charge (else uses .dir)
       hitsTaken: 0,               // toward dropping a tub
       shirtColor, pantsColor, mallenColor,  // player-chosen sprite tints (hex #RRGGBB)
+      bodyW, bodyH, headScale, feetScale,   // delivery body proportions (Mallen ignores these)
       // mallen-only:
       eaten: 0,
       frenzyMs: 0,
@@ -1540,6 +1552,7 @@ export class Game {
         dashing: (this._clock || 0) < p.dashUntilMs,
         spriteIndex: p.spriteIndex,
         shirtColor: p.shirtColor, pantsColor: p.pantsColor, mallenColor: p.mallenColor,
+        bodyW: p.bodyW, bodyH: p.bodyH, headScale: p.headScale, feetScale: p.feetScale,
         effect: p.effect,
         effectMs: p.effect ? Math.max(0, Math.round(p.effectUntilMs - (this._clock || 0))) : 0,
       })),

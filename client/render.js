@@ -654,6 +654,52 @@ function drawDanceLights(ctx, x, cy, size, t) {
   ctx.restore();
 }
 
+// Delivery body shape — split the sprite into 3 horizontal bands (head/torso/feet)
+// and scale each independently. Width + height stretch every band uniformly;
+// head/feet scales are additional multipliers on those bands. Feet bottom is
+// pinned at feetY so a tall character grows upward, not into the ground.
+// Mallen sprites are NOT drawn through this — his face is a separate overlay
+// and stretching the body would dislocate it.
+const BAND_HEAD = 0.30, BAND_BODY = 0.40, BAND_FEET = 0.30;
+function _shapeOrDefaults(shape) {
+  return {
+    bW: (shape && shape.bodyW)     || 1,
+    bH: (shape && shape.bodyH)     || 1,
+    hS: (shape && shape.headScale) || 1,
+    fS: (shape && shape.feetScale) || 1,
+  };
+}
+export function deliveryVisualHeight(baseSize, shape) {
+  const { bH, hS, fS } = _shapeOrDefaults(shape);
+  return baseSize * bH * (BAND_HEAD * hS + BAND_BODY + BAND_FEET * fS);
+}
+export function drawDeliveryBody(ctx, img, cx, feetY, baseSize, shape) {
+  const { bW, bH, hS, fS } = _shapeOrDefaults(shape);
+  // fast path: unscaled sprite drawn the same as the old drawSprite call
+  if (bW === 1 && bH === 1 && hS === 1 && fS === 1) {
+    ctx.drawImage(img, cx - baseSize / 2, feetY - baseSize, baseSize, baseSize);
+    return;
+  }
+  const srcW = img.width, srcH = img.height;
+  const sHh = srcH * BAND_HEAD, sBh = srcH * BAND_BODY, sFh = srcH * BAND_FEET;
+  const sHy = 0, sBy = sHh, sFy = sHh + sBh;
+  const base = baseSize * bH;
+  const dHh = base * BAND_HEAD * hS;
+  const dBh = base * BAND_BODY;
+  const dFh = base * BAND_FEET * fS;
+  const dHw = baseSize * bW * hS;
+  const dBw = baseSize * bW;
+  const dFw = baseSize * bW * fS;
+  const dFy = feetY - dFh;
+  const dBy = dFy - dBh;
+  const dHy = dBy - dHh;
+  // +0.6 px extra dest height per band hides hairline seams when sub-pixel
+  // positioning would otherwise leave a transparent row between bands.
+  ctx.drawImage(img, 0, sFy, srcW, sFh, cx - dFw / 2, dFy, dFw, dFh + 0.6);
+  ctx.drawImage(img, 0, sBy, srcW, sBh, cx - dBw / 2, dBy, dBw, dBh + 0.6);
+  ctx.drawImage(img, 0, sHy, srcW, sHh, cx - dHw / 2, dHy, dHw, dHh + 0.6);
+}
+
 function drawPlayer(ctx, p, frame, isSelf) {
   // twin-stick: while charging a throw, the sprite + foot-arrow follow the
   // throw vector (where the tub is about to go), not where the player is
@@ -709,15 +755,22 @@ function drawPlayer(ctx, p, frame, isSelf) {
   // dance bob/sway is reused by the Mallen face so his head dances with the body
   const danceBob = dancing ? Math.abs(Math.sin(tnow / 130)) * size * 0.16 : 0;
   const danceSway = dancing ? Math.sin(tnow / 190) * size * 0.11 : 0;
+  // Delivery body proportions come from the player's customize sliders.
+  // Default = {1,1,1,1}, which renders identically to the old drawSprite path.
+  const shape = p.isMallen ? null : p;
+  const feetBaseY = cy + size / 2;
   if (dancing) {
-    drawSprite(ctx, img, px + danceSway, cy - danceBob, size, size);
+    if (p.isMallen) drawSprite(ctx, img, px + danceSway, cy - danceBob, size, size);
+    else drawDeliveryBody(ctx, img, px + danceSway, feetBaseY - danceBob, size, shape);
   } else if (car) {
     drawSprite(ctx, car, px, p.y, size * 1.9, size * 1.9); // centered on the player
   } else if (visStun) {
     // A Mallen chomp can stun ~everyone at once, so avoid shadowBlur here (it's a
     // brutal per-sprite mobile GPU cost when many are stunned) — use a cheap
     // hue-cycling ring + the existing flicker/jitter instead.
-    drawSprite(ctx, img, px, cy + (Math.random() - 0.5) * 4, size, size);
+    const jitterY = (Math.random() - 0.5) * 4;
+    if (p.isMallen) drawSprite(ctx, img, px, cy + jitterY, size, size);
+    else drawDeliveryBody(ctx, img, px, feetBaseY + jitterY, size, shape);
     ctx.save();
     ctx.strokeStyle = `hsl(${(tnow * 0.8) % 360},100%,62%)`; // rapid color flash
     ctx.lineWidth = 3;
@@ -730,7 +783,8 @@ function drawPlayer(ctx, p, frame, isSelf) {
     drawSprite(ctx, img, p.x, cy, size, size);
     ctx.restore();
   } else {
-    drawSprite(ctx, img, p.x, cy, size, size);
+    if (p.isMallen) drawSprite(ctx, img, p.x, cy, size, size);
+    else drawDeliveryBody(ctx, img, p.x, feetBaseY, size, shape);
   }
   if (!img) fallbackCircle(ctx, p.x, p.y, p.radius, p.isMallen ? '#a4c' : '#d96');
 
@@ -779,9 +833,11 @@ function drawPlayer(ctx, p, frame, isSelf) {
     }
   }
 
-  // extra clearance for the Mallen — his bobblehead face sits above the body
-  // sprite, so the standard "just above the sprite" offset overlaps the head.
-  const topY = cy - size / 2 - 4 - (p.isMallen ? size * 0.22 : 0);
+  // tag sits above the actual visual top of the body — for Mallen, that's the
+  // bobblehead face's extra clearance; for delivery, it's wherever the
+  // stretched body (head scale, height) actually reaches.
+  const visualH = p.isMallen ? size : deliveryVisualHeight(size, p);
+  const topY = (cy + size / 2) - visualH - 4 - (p.isMallen ? size * 0.22 : 0);
   const tag = `${p.name} (${p.isMallen ? p.eaten : p.score})`;
   ctx.font = 'bold 14px system-ui, sans-serif';
   ctx.textAlign = 'center';
@@ -1090,8 +1146,18 @@ function drawMinimap(ctx, x, y, size, state, selfId) {
     square(state.loci.fridge.x, state.loci.fridge.y, 6.5, '#9ad7ff');   // fridge (blue)
   }
   for (const p of state.players || []) {
-    if (p.isMallen) dot(p.x, p.y, 3.6, p.mallenColor || '#cd2a2a');
-    else halfDot(p.x, p.y, 3, p.shirtColor || '#ffffff', p.pantsColor || '#3a6ecd');
+    if (p.isMallen) {
+      // demon emoji matches the off-screen edge-arrow marker — easier to pick
+      // out at a glance than a colored dot in a sea of crew dots.
+      ctx.save();
+      ctx.font = '15px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('👹', mx(p.x), my(p.y));
+      ctx.restore();
+    } else {
+      halfDot(p.x, p.y, 3, p.shirtColor || '#ffffff', p.pantsColor || '#3a6ecd');
+    }
   }
   // self indicator: a high-contrast white ring around your dot so you can find
   // yourself instantly when the map is busy with 10+ players.

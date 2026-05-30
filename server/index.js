@@ -178,7 +178,8 @@ wss.on('connection', (ws) => {
             pants:  typeof m.pantsColor  === 'string' ? m.pantsColor  : null,
             mallen: typeof m.mallenColor === 'string' ? m.mallenColor : null,
           };
-          playerId = game.addPlayer(name, colors);
+          const shape = (m.shape && typeof m.shape === 'object') ? m.shape : null;
+          playerId = game.addPlayer(name, colors, shape);
           sockets.set(playerId, ws);
           send(ws, MSG.WELCOME, { id: playerId });
           // if we're idling in lobby with players, kick a round when ready

@@ -50,6 +50,39 @@ test('non-mallen players are not mallen', () => {
   assert.equal(g.players.get(id).isMallen, false);
 });
 
+test('addPlayer accepts body-shape sliders and clamps to safe ranges', () => {
+  const g = newGame();
+  const id = g.addPlayer('alice', null, { bodyW: 1.2, bodyH: 0.9, headScale: 1.5, feetScale: 0.7 });
+  const p = g.players.get(id);
+  assert.equal(p.bodyW, 1.2);
+  assert.equal(p.bodyH, 0.9);
+  assert.equal(p.headScale, 1.5);
+  assert.equal(p.feetScale, 0.7);
+  // out-of-range and garbage values clamp / default
+  const id2 = g.addPlayer('bob', null, { bodyW: 99, bodyH: -5, headScale: 'banana' });
+  const q = g.players.get(id2);
+  assert.equal(q.bodyW, 1.6);   // clamped to max
+  assert.equal(q.bodyH, 0.5);   // clamped to min
+  assert.equal(q.headScale, 1); // garbage -> default
+  assert.equal(q.feetScale, 1); // missing  -> default
+  // missing shape entirely -> all defaults
+  const id3 = g.addPlayer('carol');
+  const r = g.players.get(id3);
+  assert.equal(r.bodyW, 1); assert.equal(r.bodyH, 1);
+  assert.equal(r.headScale, 1); assert.equal(r.feetScale, 1);
+});
+
+test('snapshot exposes body-shape per player', () => {
+  const g = newGame();
+  g.addPlayer('alice', null, { bodyW: 1.3, headScale: 1.8 });
+  const snap = g.snapshot();
+  const p = snap.players[0];
+  assert.equal(p.bodyW, 1.3);
+  assert.equal(p.headScale, 1.8);
+  assert.equal(p.bodyH, 1);     // default carried through
+  assert.equal(p.feetScale, 1);
+});
+
 test('removePlayer drops carried tub as loose', () => {
   const g = newGame();
   const id = g.addPlayer('carrier');
