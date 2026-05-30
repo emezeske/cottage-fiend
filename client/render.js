@@ -702,17 +702,18 @@ function drawPlayer(ctx, p, frame, isSelf) {
       const faceH = size * 0.62;
       const faceW = faceH * (face.width / face.height);
       const walkBob = p.moving ? Math.sin(tnow / 110) * size * 0.05 : 0;
-      // small directional lean: face nudged east/west while side-walking, neutral
-      // when standing still or moving N/S.
-      const faceDx = p.moving
-        ? (dir === 'e' ? size * 0.13 : dir === 'w' ? -size * 0.13 : 0)
-        : 0;
+      // Face lean follows the SPRITE direction, not movement — Mallen leans
+      // even at rest if his last facing is east or west.
+      const faceDx = dir === 'e' ? size * 0.13 : dir === 'w' ? -size * 0.13 : 0;
+      // Face mirror: side-facing follows body; N/S alternates per walk frame
+      // so the up/down animation has some variety on the bobblehead.
+      const faceMirror = (dir === 'n' || dir === 's') ? (f === 1) : (dir === 'w');
       const faceY = car
         ? (p.y - size * 0.40 + walkBob)    // perched on the Ferrari's cabin
         : (cy - size * 0.32 + walkBob - danceBob);
       ctx.save();
       ctx.translate(p.x + faceDx + danceSway, faceY);
-      if (p.dir.x < 0) ctx.scale(-1, 1);   // mirror when facing left
+      if (faceMirror) ctx.scale(-1, 1);
       ctx.drawImage(face, -faceW / 2, -faceH / 2, faceW, faceH);
       ctx.restore();
     }
