@@ -79,8 +79,13 @@ export function loadAssets() {
 // vest replacement.
 const VEST_H_LO = 10,  VEST_H_HI = 45;
 const PANTS_H_LO = 195, PANTS_H_HI = 245;
-const TINT_S_MIN = 0.40;
-const TINT_V_MIN = 0.15;
+// Skin shadows on the face come out cool-blue (same hue family as the hat) at
+// moderate saturation. The real hat / pants pixels are very saturated (~0.92
+// per sampling), so a higher pants threshold lets us tint the hat without
+// sweeping up the blueish skin-shadow pixels.
+const VEST_S_MIN  = 0.40;
+const PANTS_S_MIN = 0.65;
+const TINT_V_MIN  = 0.15;
 
 function rgbToHsv(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -136,10 +141,10 @@ function recolorSprite(srcImg, vestH, pantsH) {
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] < 16) continue;                                 // transparent
     const [hue, sat, val] = rgbToHsv(d[i], d[i + 1], d[i + 2]);
-    if (sat < TINT_S_MIN || val < TINT_V_MIN) continue;          // skin / outline / white
+    if (val < TINT_V_MIN) continue;                              // outlines / shadows
     let targetH = null;
-    if (hue >= VEST_H_LO && hue <= VEST_H_HI) targetH = vestH;
-    else if (hue >= PANTS_H_LO && hue <= PANTS_H_HI) targetH = pantsH;
+    if (hue >= VEST_H_LO && hue <= VEST_H_HI && sat >= VEST_S_MIN) targetH = vestH;
+    else if (hue >= PANTS_H_LO && hue <= PANTS_H_HI && sat >= PANTS_S_MIN) targetH = pantsH;
     if (targetH === null) continue;
     // preserve the source's saturation + value (the shading) but swap the hue
     const [r, g, b] = hsvToRgb(targetH, Math.max(sat, 0.65), val);
