@@ -993,6 +993,20 @@ function drawMinimap(ctx, x, y, size, state) {
     ctx.fillStyle = color;
     ctx.fill();
   };
+  // Two-tone player dot: top half = shirt, bottom half = pants/hat.
+  const halfDot = (wx, wy, r, topColor, botColor) => {
+    const cx = mx(wx), cy = my(wy);
+    ctx.beginPath();                                     // TOP half (y above center)
+    ctx.moveTo(cx + r, cy);
+    ctx.arc(cx, cy, r, 0, Math.PI, true);                // anticlockwise = upward sweep
+    ctx.closePath();
+    ctx.fillStyle = topColor; ctx.fill();
+    ctx.beginPath();                                     // BOTTOM half
+    ctx.moveTo(cx + r, cy);
+    ctx.arc(cx, cy, r, 0, Math.PI, false);               // clockwise = downward sweep
+    ctx.closePath();
+    ctx.fillStyle = botColor; ctx.fill();
+  };
 
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(x, y, size, size);
@@ -1006,7 +1020,7 @@ function drawMinimap(ctx, x, y, size, state) {
   }
   for (const p of state.players || []) {
     if (p.isMallen) dot(p.x, p.y, 3.6, p.mallenColor || '#cd2a2a');
-    else dot(p.x, p.y, 2, p.shirtColor || '#ffffff');               // players (small)
+    else halfDot(p.x, p.y, 3, p.shirtColor || '#ffffff', p.pantsColor || '#3a6ecd');
   }
 }
 
