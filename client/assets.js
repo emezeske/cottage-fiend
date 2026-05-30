@@ -81,8 +81,8 @@ export function loadAssets() {
 // trivially separable from everything else in the sprite — it sits at very low
 // saturation (S<=0.06) and very high value (V>=0.79) across every direction,
 // with no skin or cloth pixels intruding. Cool-blue pants are isolated by hue.
-const SHIRT_S_MAX = 0.10;
-const SHIRT_V_MIN = 0.70;
+const SHIRT_S_MAX = 0.18;
+const SHIRT_V_MIN = 0.60;
 const PANTS_H_LO = 200, PANTS_H_HI = 238;
 const PANTS_S_MIN = 0.55;
 const TINT_V_MIN  = 0.15;
@@ -131,9 +131,11 @@ export function hexToHue(hex) {
 // Source brightness variation is preserved as a scale relative to the band's
 // reference V so highlights / shadows survive the swap.
 // Reference Vs for the brightness-scaling step (source pixel V is scaled by
-// target V / refV). Sampled from delivery_s_0: shirt ~0.82, pants ~0.40.
+// target V / refV). Sampled from delivery_s_0: shirt ~0.82, pants ~0.40,
+// and from mallen_s_0: body red ~0.59.
 const SHIRT_REF_V = 0.82;
 const PANTS_REF_V = 0.40;
+const MALLEN_REF_V = 0.55;
 
 const _spriteCache = new Map();
 export function getDeliverySprite(shirtHex, pantsHex, dir, frame) {
@@ -218,7 +220,7 @@ function recolorMallen(srcImg, targetHsv) {
   // distance from the body color even after the swap.
   const SOURCE_BODY_H = 4;
   const offset = ((tH - SOURCE_BODY_H) + 360) % 360;
-  const tRef = tV / REF_V;
+  const tRef = tV / MALLEN_REF_V;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] < 16) continue;
     const [hue, sat, val] = rgbToHsv(d[i], d[i + 1], d[i + 2]);
