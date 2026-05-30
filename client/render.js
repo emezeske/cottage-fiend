@@ -705,7 +705,7 @@ function drawPlayer(ctx, p, frame, isSelf) {
       // small directional lean: face nudged east/west while side-walking, neutral
       // when standing still or moving N/S.
       const faceDx = p.moving
-        ? (dir === 'e' ? size * 0.08 : dir === 'w' ? -size * 0.08 : 0)
+        ? (dir === 'e' ? size * 0.13 : dir === 'w' ? -size * 0.13 : 0)
         : 0;
       const faceY = car
         ? (p.y - size * 0.40 + walkBob)    // perched on the Ferrari's cabin
