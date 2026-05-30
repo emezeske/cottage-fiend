@@ -282,6 +282,24 @@
       font-weight: 700;
       font-size: 14px;
     }
+    /* Global "Nuclear launch detected." banner shown for ~3s when a nuke launches.
+       Positioned above the thumb buttons (joystick/action sit at bottom: 28px + ~110px tall). */
+    #nukeBanner {
+      position: fixed;
+      bottom: max(180px, calc(env(safe-area-inset-bottom, 0px) + 164px));
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 22px;
+      letter-spacing: 1px;
+      white-space: nowrap;
+      z-index: 9;
+      display: none;
+      text-shadow: 0 0 6px rgba(0, 0, 0, 0.85), 0 2px 0 #000;
+      pointer-events: none;
+    }
+
     .picker input[type="color"] {
       width: 64px;
       height: 64px;
@@ -302,6 +320,7 @@
     src="https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3">
   </audio>
 
+  <div id="nukeBanner">Nuclear launch detected.</div>
   <button id="goBtn">LET'S GO!</button>
   <div id="joystick"><div id="joystickKnob"></div></div>
   <button id="actionBtn">PUNCH</button>

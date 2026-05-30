@@ -34,6 +34,14 @@ const mallenColor = document.getElementById('mallenColor');
 const pantsPicker = document.getElementById('pantsPicker');
 const mallenPicker = document.getElementById('mallenPicker');
 const readyBtn = document.getElementById('readyBtn');
+const nukeBanner = document.getElementById('nukeBanner');
+let _nukeBannerTimer = null;
+function showNukeBanner() {
+  if (!nukeBanner) return;
+  nukeBanner.style.display = 'block';
+  if (_nukeBannerTimer) clearTimeout(_nukeBannerTimer);
+  _nukeBannerTimer = setTimeout(() => { nukeBanner.style.display = 'none'; }, 3000);
+}
 
 let ws = null;
 let selfId = null;
@@ -401,7 +409,7 @@ function connect(name) {
         if (e.type === 'presentClaim' && e.id === selfId && e.fx === 'interstitial') showInterstitial();
         if (e.type === 'explosion') addCurdBurst(e.x, e.y); // curds radiate outward in timed rings
         // nuke: global "launch detected" SFX on commit + a big visual + boom on detonation
-        if (e.type === 'nukeLaunch') playSound('nuke_launch');
+        if (e.type === 'nukeLaunch') { playSound('nuke_launch'); showNukeBanner(); }
         if (e.type === 'nukeDetonate') { playSound('nuke_explosion'); addNukeExplosion(e.x, e.y); }
       }
       updateButtons();
