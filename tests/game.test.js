@@ -960,6 +960,84 @@ test('gift deck: forced-present admin override bypasses the deck', () => {
   assert.equal(p._lastFx, FX.MAGNET, 'forced-present overrides the deck');
 });
 
+// ---- Catch-up bias (post-deck) -------------------------------------------
+
+test('catch-up bias: behind player scores higher buff fraction than leader', () => {
+  // statistical test — run many true-random rolls per player at swing=1.0
+  // (extreme bias for a clean signal) and compare buff fractions.
+  const g = newGame();
+  const leader  = g.addPlayer('leader');
+  const trailer = g.addPlayer('trailer');
+  g.startRound(); advance(g, 3200);
+  const L = g.players.get(leader), T = g.players.get(trailer);
+  L.score = 8; T.score = 0;                    // big gap
+  // drain decks so subsequent rolls hit _rollBiasedEffect
+  L.giftDeck = []; T.giftDeck = [];
+  g.setPresentBias(1.0);                       // max swing — should be very different
+  const buffs = new Set(BUFF_POOL.map((e) => e.fx));
+  const debuffs = new Set(DEBUFF_POOL.map((e) => e.fx));
+  let lBuff = 0, lDeb = 0, tBuff = 0, tDeb = 0;
+  for (let i = 0; i < 600; i++) {
+    g._applyPresent(L, g._clock);
+    if (buffs.has(L._lastFx)) lBuff++; else if (debuffs.has(L._lastFx)) lDeb++;
+    g._applyPresent(T, g._clock);
+    if (buffs.has(T._lastFx)) tBuff++; else if (debuffs.has(T._lastFx)) tDeb++;
+  }
+  const lBuffPct = lBuff / (lBuff + lDeb);
+  const tBuffPct = tBuff / (tBuff + tDeb);
+  assert.ok(tBuffPct > lBuffPct + 0.10,
+    `trailing buff fraction ${tBuffPct.toFixed(2)} should beat leader's ${lBuffPct.toFixed(2)} by >10%`);
+});
+
+test('catch-up bias: swing=0 produces no thumb on the scale (buff fraction matches between leader and trailer)', () => {
+  const g = newGame();
+  const leader  = g.addPlayer('leader');
+  const trailer = g.addPlayer('trailer');
+  g.startRound(); advance(g, 3200);
+  const L = g.players.get(leader), T = g.players.get(trailer);
+  L.score = 10; T.score = 0;                   // huge gap — would matter if bias on
+  L.giftDeck = []; T.giftDeck = [];
+  g.setPresentBias(0);                         // disabled
+  const buffs = new Set(BUFF_POOL.map((e) => e.fx));
+  let lBuff = 0, tBuff = 0, n = 0;
+  for (let i = 0; i < 800; i++) {
+    g._applyPresent(L, g._clock); if (buffs.has(L._lastFx)) lBuff++;
+    g._applyPresent(T, g._clock); if (buffs.has(T._lastFx)) tBuff++;
+    n++;
+  }
+  // with bias off, buff fractions are statistically equal — within ~5%
+  assert.ok(Math.abs(lBuff/n - tBuff/n) < 0.06,
+    `swing=0 should not skew: leader ${lBuff}/${n}, trailer ${tBuff}/${n}`);
+});
+
+test('catch-up bias: Mallen is included via normalized progress (eaten / mallenEatsToWin)', () => {
+  const g = newGame();
+  g.addPlayer('crew1'); g.addPlayer('crew2');
+  const mid = g.addPlayer('mallen');
+  g.startRound(); advance(g, 3200);
+  const m = g.players.get(mid);
+  // crew is leading (avg ~5 normalized), Mallen is far behind (eaten=0)
+  for (const p of g.players.values()) if (!p.isMallen) p.score = 8;
+  m.eaten = 0;
+  // bias for Mallen should be positive (he's well below avg)
+  const bias = g._scoreBias(m);
+  assert.ok(bias > 0.5, `Mallen far behind should get a strong positive bias, got ${bias}`);
+  // and a Mallen far ahead should get a negative bias
+  for (const p of g.players.values()) if (!p.isMallen) p.score = 0;
+  m.eaten = 10;          // maxed out
+  const bias2 = g._scoreBias(m);
+  assert.ok(bias2 < -0.5, `Mallen way ahead should get a strong negative bias, got ${bias2}`);
+});
+
+test('catch-up bias: setPresentBias clamps to [0, 1.0]', () => {
+  const g = newGame();
+  g.addPlayer('a');
+  g.setPresentBias(-1);          assert.equal(g.presentBias, 0);
+  g.setPresentBias(5);           assert.equal(g.presentBias, 1.0);
+  g.setPresentBias('not a num'); assert.equal(g.presentBias, 1.0);      // unchanged
+  g.setPresentBias(0.5);         assert.equal(g.presentBias, 0.5);
+});
+
 // ---- Regression tests for the post-review bug fixes -----------------------
 
 test('regression: claiming a new buff clears prior nukeArmed', () => {

@@ -16,7 +16,10 @@ const DEBUFF_FX = new Set(DEBUFF_POOL.map((e) => e.fx)); // for buff-vs-curse SF
 const FX_VALUES = new Set(Object.values(FX));            // valid effect ids (admin force-present)
 import { dist, normalize, resolveCircleOverlap, clampToArena, chargePower } from './vec.js';
 import { placeLoci, randSpawn } from './spawn.js';
-import { rollEffect } from './effects.js';
+import { rollEffect, weightedPick } from './effects.js';
+
+const PRESENT_BIAS_DEFAULT = 0.30;        // ±30% weight swing at the cap (per-axis)
+const PRESENT_BIAS_MAX = 1.00;            // never exceed ±100% — admin slider cap
 
 let _nextId = 1;
 export function _resetIds() { _nextId = 1; } // test helper
@@ -68,6 +71,7 @@ export class Game {
     this.forcedFx = null;       // admin testing: force every present to this effect (null = random)
     this.mallenPower = MALLEN_POWER_DEFAULT; // admin: live difficulty knob for the Mallen (1-5)
     this.presentRate = 1;       // admin: present-frequency multiplier (1 = normal, higher = more)
+    this.presentBias = PRESENT_BIAS_DEFAULT; // admin: catch-up bias on TRUE-RANDOM rolls (post-deck)
     this.corgis = [];           // active CORGI_ATTACK hunters
     this._corgiSeq = 1;
     this.discs = [];            // active DISC_GOLF projectiles
@@ -111,6 +115,51 @@ export class Game {
   setPresentRate(rate) {
     const r = Number(rate);
     if (Number.isFinite(r) && r > 0) this.presentRate = Math.min(8, Math.max(0.25, r));
+  }
+
+  // Admin: catch-up rubber-banding. 0 = pure random, higher = more thumb on
+  // the scale. Applies ONLY to true-random rolls (after the per-player
+  // "every gift once" deck has drained). Behind players get higher buff
+  // weights + lower debuff weights; leaders get the inverse.
+  setPresentBias(swing) {
+    const s = Number(swing);
+    if (!Number.isFinite(s)) return;
+    this.presentBias = Math.max(0, Math.min(PRESENT_BIAS_MAX, s));
+  }
+
+  // [-1, +1]: positive = "below average" (favor buffs), negative = "above
+  // average" (favor debuffs). Mallen included via normalized progress so his
+  // eats-to-win and the crew's score-to-win compare on the same scale.
+  _scoreBias(p) {
+    if (this.players.size < 2) return 0;
+    const norm = (o) => o.isMallen
+      ? (o.eaten / ROUND.mallenEatsToWin) * ROUND.pointsToWin
+      : o.score;
+    let total = 0;
+    for (const o of this.players.values()) total += norm(o);
+    const avg = total / this.players.size;
+    const my = norm(p);
+    const cap = 4;
+    const clamped = Math.max(-cap, Math.min(cap, my - avg));
+    return -clamped / cap;
+  }
+
+  // True-random roll with the per-player catch-up bias applied to buff /
+  // debuff weights. Wildcards stay neutral (symmetric).
+  _rollBiasedEffect(p) {
+    const bias = this._scoreBias(p);
+    const swing = this.presentBias;
+    const buffMul   = Math.max(0, 1 + bias * swing);
+    const debuffMul = Math.max(0, 1 - bias * swing);
+    const buffs    = p.isMallen ? MALLEN_BUFF_POOL     : BUFF_POOL;
+    const debuffs  = p.isMallen ? MALLEN_DEBUFF_POOL   : DEBUFF_POOL;
+    const wilds    = p.isMallen ? MALLEN_WILDCARD_POOL : WILDCARD_POOL;
+    const pool = [
+      ...buffs.map(e   => ({ fx: e.fx, w: e.w * buffMul })),
+      ...debuffs.map(e => ({ fx: e.fx, w: e.w * debuffMul })),
+      ...wilds.map(e   => ({ fx: e.fx, w: e.w })),
+    ];
+    return weightedPick(pool, this.rng);
   }
 
   // Emit the global FIRST CURD cue the first time anyone scores in a round.
@@ -533,7 +582,7 @@ export class Game {
     } else {
       if (p.giftDeck == null) p.giftDeck = this._buildGiftDeck(p);
       if (p.giftDeck.length > 0) fx = p.giftDeck.shift();
-      else fx = rollEffect(p.isMallen, this.rng);
+      else fx = this._rollBiasedEffect(p);   // catch-up bias kicks in post-deck only
     }
     p._lastFx = fx;
     if (ONE_SHOT.has(fx)) {

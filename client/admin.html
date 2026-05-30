@@ -97,6 +97,16 @@
   <p class="sub">Scales his move speed, attack/dash cooldown, dash reach, and devour-stun
      radius/duration. Applies immediately to the live game. Persists across RESET.</p>
 
+  <h2>Catch-up bias</h2>
+  <label for="presentBias">Rubber-banding on TRUE-random gifts (post-deck):</label>
+  <input type="range" id="presentBias" min="0" max="1" step="0.05" value="0.30" style="width: 320px; vertical-align: middle;" />
+  <span id="presentBiasLabel">±30%</span>
+  <span id="presentBiasStatus"></span>
+  <p class="sub">0 = pure random, higher = more thumb on the scale. Buff weights go UP for
+     below-average players and DOWN for above-average ones; debuff weights flip. Only
+     applies once a player has cycled through their "every gift once" deck. Applies
+     immediately. Persists across RESET.</p>
+
   <h2>Server</h2>
   <button id="reset">RESET SERVER STATE</button>
   <span id="status"></span>
@@ -138,6 +148,23 @@
         mallenStatus.textContent = await r.text();
       } catch (e) {
         mallenStatus.textContent = 'failed: ' + e;
+      }
+    };
+
+    const bias = document.getElementById('presentBias');
+    const biasLabel = document.getElementById('presentBiasLabel');
+    const biasStatus = document.getElementById('presentBiasStatus');
+    const updateBiasLabel = () => { biasLabel.textContent = '±' + Math.round(bias.value * 100) + '%'; };
+    fetch('/admin/present-bias').then(r => r.text()).then(v => {
+      if (v) { bias.value = v; updateBiasLabel(); }
+    }).catch(() => {});
+    bias.oninput = updateBiasLabel;       // live label as user drags
+    bias.onchange = async () => {
+      try {
+        const r = await fetch('/admin/present-bias?swing=' + encodeURIComponent(bias.value), { method: 'POST' });
+        biasStatus.textContent = await r.text();
+      } catch (e) {
+        biasStatus.textContent = 'failed: ' + e;
       }
     };
 
