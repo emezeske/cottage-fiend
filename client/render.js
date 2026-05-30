@@ -705,9 +705,11 @@ function drawPlayer(ctx, p, frame, isSelf) {
       // Face lean follows the SPRITE direction, not movement — Mallen leans
       // even at rest if his last facing is east or west.
       const faceDx = dir === 'e' ? size * 0.13 : dir === 'w' ? -size * 0.13 : 0;
-      // Face mirror: side-facing follows body; N/S alternates per walk frame
-      // so the up/down animation has some variety on the bobblehead.
-      const faceMirror = (dir === 'n' || dir === 's') ? (f === 1) : (dir === 'w');
+      // Face mirror — fixed per direction (no per-frame flipping):
+      //   west: mirror (face oriented with body)
+      //   north: mirror (so up/down look distinct from each other)
+      //   south + east: no mirror
+      const faceMirror = dir === 'w' || dir === 'n';
       const faceY = car
         ? (p.y - size * 0.40 + walkBob)    // perched on the Ferrari's cabin
         : (cy - size * 0.32 + walkBob - danceBob);
@@ -733,7 +735,9 @@ function drawPlayer(ctx, p, frame, isSelf) {
     }
   }
 
-  const topY = cy - size / 2 - 4;   // just above the sprite, so it never overlaps
+  // extra clearance for the Mallen — his bobblehead face sits above the body
+  // sprite, so the standard "just above the sprite" offset overlaps the head.
+  const topY = cy - size / 2 - 4 - (p.isMallen ? size * 0.22 : 0);
   const tag = `${p.name} (${p.isMallen ? p.eaten : p.score})`;
   ctx.font = 'bold 14px system-ui, sans-serif';
   ctx.textAlign = 'center';

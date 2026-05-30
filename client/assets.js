@@ -36,12 +36,11 @@ const MANIFEST = {
 for (const d of DIRS_4)
   for (let f = 0; f < 2; f++)
     MANIFEST[`delivery_${d}_${f}`] = `delivery_${d}_${f}.webp`;
-// mallen_{dir}_{frame} (normal) and mallen_frenzy_{dir}_{frame} (frenzy)
+// mallen_{dir}_{frame} — used for both normal AND frenzy (frenzy keeps the
+// bigger size + colorful glow but reuses the normal body sprites).
 for (const d of DIRS_4)
-  for (let f = 0; f < 2; f++) {
+  for (let f = 0; f < 2; f++)
     MANIFEST[`mallen_${d}_${f}`] = `mallen_${d}_${f}.webp`;
-    MANIFEST[`mallen_frenzy_${d}_${f}`] = `mallen_frenzy_${d}_${f}.webp`;
-  }
 // ferrari_{dir} — full 8-direction art, shown during 2X SPEED
 for (const d of DIRS_8) MANIFEST[`ferrari_${d}`] = `ferrari_${d}.webp`;
 // corgi_{dir} — full 8-direction art for the CORGI_ATTACK hunter
@@ -168,12 +167,15 @@ export function getDeliverySprite(shirtHex, pantsHex, dir, frame) {
 // at H~280. Tint everything in the warm-arc so frenzy shifts with the body.
 const MALLEN_CACHE_MAX = 64;
 const _mallenCache = new Map();
-export function getMallenSprite(mallenHex, frenzy, dir, frame) {
+// Frenzy keeps its larger size + colorful glow in render.js, but reuses the
+// normal body art (no frenzy-specific webp). The `frenzy` arg is accepted for
+// call-site clarity but currently ignored in the source lookup.
+export function getMallenSprite(mallenHex, _frenzy, dir, frame) {
   const m = normalizeHex(mallenHex);
-  const key = `${m}|${frenzy ? 1 : 0}|${dir}|${frame}`;
+  const key = `${m}|${dir}|${frame}`;
   let canvas = _cacheGet(_mallenCache, key, MALLEN_CACHE_MAX);
   if (canvas) return canvas;
-  const src = images[`mallen${frenzy ? '_frenzy' : ''}_${dir}_${frame}`];
+  const src = images[`mallen_${dir}_${frame}`];
   if (!src) return null;
   canvas = recolorMallen(src, hexToHsv(m));
   _cachePut(_mallenCache, key, canvas, MALLEN_CACHE_MAX);
