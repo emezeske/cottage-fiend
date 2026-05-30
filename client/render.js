@@ -705,11 +705,11 @@ function drawPlayer(ctx, p, frame, isSelf) {
       // Face lean follows the SPRITE direction, not movement — Mallen leans
       // even at rest if his last facing is east or west.
       const faceDx = dir === 'e' ? size * 0.13 : dir === 'w' ? -size * 0.13 : 0;
-      // Face mirror — fixed per direction (no per-frame flipping):
-      //   west: mirror (face oriented with body)
-      //   north: mirror (so up/down look distinct from each other)
-      //   south + east: no mirror
-      const faceMirror = dir === 'w' || dir === 'n';
+      // Face mirror — fixed per direction. Side-mirror swaps in frenzy mode
+      // (since the body sprite is the same in frenzy, the face flip is what
+      // makes the two modes feel visually distinct on side-walks).
+      const sideMirror = p.frenzy ? (dir === 'e') : (dir === 'w');
+      const faceMirror = sideMirror || dir === 'n';
       const faceY = car
         ? (p.y - size * 0.40 + walkBob)    // perched on the Ferrari's cabin
         : (cy - size * 0.32 + walkBob - danceBob);

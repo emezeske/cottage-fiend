@@ -1,6 +1,6 @@
 // Main client. Connects to the server, sends input, renders snapshots.
 
-import { loadAssets, getDeliverySprite, getMallenSprite, hueToHex, hexToHue } from './assets.js';
+import { loadAssets, getDeliverySprite, getMallenSprite, hueToHex, hexToHue, images } from './assets.js';
 import { initAudio, playEvent, playSound, setMusic, suspendAudio, resumeAudio, prefetchAudio, playLoop, stopLoop, duckMusic } from './audio.js';
 import { render, addSplat, addConfetti, addBam, addChomp, addPoof, addGoldenCurd, addCurdBurst, addNukeExplosion, AD_H } from './render.js';
 
@@ -685,15 +685,30 @@ function hideCustomizeScreen() {
 }
 function drawPreview() {
   const pctx = previewCanvas.getContext('2d');
+  const W = previewCanvas.width;
   pctx.imageSmoothingEnabled = false;
-  pctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-  const sprite = _pendingMallen
-    ? getMallenSprite(mallenColor.value, false, 's', _previewFrame)
-    : getDeliverySprite(shirtColor.value, pantsColor.value, 's', _previewFrame);
-  if (sprite) {
-    const s = previewCanvas.width;
-    pctx.drawImage(sprite, 0, 0, s, s);
+  pctx.clearRect(0, 0, W, W);
+
+  if (_pendingMallen) {
+    // Body fills ~70% of the preview and sits low, leaving the upper area for
+    // the bobblehead face overlay — matches the in-game faceY = cy - 0.32*size.
+    const bodySize = W * 0.70;
+    const bodyCx = W / 2;
+    const bodyCy = W * 0.60;
+    const body = getMallenSprite(mallenColor.value, false, 's', _previewFrame);
+    if (body) pctx.drawImage(body, bodyCx - bodySize / 2, bodyCy - bodySize / 2, bodySize, bodySize);
+    const face = images.mallen_face;
+    if (face) {
+      const faceH = bodySize * 0.62;
+      const faceW = faceH * (face.width / face.height);
+      const faceY = bodyCy - bodySize * 0.32;            // matches render.js
+      pctx.drawImage(face, bodyCx - faceW / 2, faceY - faceH / 2, faceW, faceH);
+    }
+    return;
   }
+
+  const sprite = getDeliverySprite(shirtColor.value, pantsColor.value, 's', _previewFrame);
+  if (sprite) pctx.drawImage(sprite, 0, 0, W, W);
 }
 // live update + persist on every color tweak so a refresh before READY keeps the look
 function _onPickerChange() {
