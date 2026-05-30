@@ -303,15 +303,82 @@
       pointer-events: none;
     }
 
-    .picker input[type="color"] {
+    /* Swatch buttons replace <input type="color">. The native picker on Firefox
+       Android is a tiny preset palette — we use our own HSV picker (below)
+       on every browser so the experience is consistent and actually usable. */
+    .swatch {
       width: 64px;
       height: 64px;
       padding: 0;
       border: 3px solid #1e1814;
       border-radius: 12px;
-      background: none;
+      background: #ffffff;
       cursor: pointer;
+      box-shadow: 0 4px 0 #1e1814;
     }
+    .swatch:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #1e1814;
+    }
+
+    #colorPickerModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 60;
+      touch-action: none;
+    }
+    #colorPickerBox {
+      background: linear-gradient(180deg, #2a3a2a, #1a2a1a);
+      border: 3px solid #1e1814;
+      border-radius: 14px;
+      padding: 18px;
+      width: min(320px, 92vw);
+      box-shadow: 0 6px 0 #1e1814;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #cpSV, #cpHue {
+      width: 100%;
+      display: block;
+      border-radius: 8px;
+      touch-action: none;
+    }
+    #cpSV  { height: 200px; }
+    #cpHue { height: 28px; }
+    #cpPreviewRow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    #cpPreview {
+      width: 48px;
+      height: 32px;
+      border-radius: 6px;
+      border: 2px solid #1e1814;
+      background: #ffffff;
+      flex-shrink: 0;
+    }
+    #cpHex {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      flex-grow: 1;
+    }
+    #cpButtons {
+      display: flex;
+      gap: 10px;
+    }
+    #cpButtons button {
+      font-size: 14px;
+      padding: 10px 14px;
+    }
+    #cpCancel { background: #c97a7a; }
   </style>
 </head>
 
@@ -338,11 +405,26 @@
     <h2 id="customizeTitle">Customize your character</h2>
     <canvas id="previewCanvas" width="220" height="220"></canvas>
     <div class="picker-row" id="pickerRow">
-      <label class="picker">SHIRT <input type="color" id="shirtColor" value="#ffffff" /></label>
-      <label class="picker" id="pantsPicker">HAT &amp; PANTS <input type="color" id="pantsColor" value="#3a6ecd" /></label>
-      <label class="picker" id="mallenPicker" style="display:none;">MALLEN <input type="color" id="mallenColor" value="#cd3c34" /></label>
+      <label class="picker">SHIRT <button type="button" class="swatch" id="shirtColor" data-color="#ffffff"></button></label>
+      <label class="picker" id="pantsPicker">HAT &amp; PANTS <button type="button" class="swatch" id="pantsColor" data-color="#3a6ecd"></button></label>
+      <label class="picker" id="mallenPicker" style="display:none;">MALLEN <button type="button" class="swatch" id="mallenColor" data-color="#cd3c34"></button></label>
     </div>
     <button id="readyBtn">READY TO PLAY!</button>
+  </div>
+
+  <div id="colorPickerModal" role="dialog" aria-label="Pick a color">
+    <div id="colorPickerBox">
+      <canvas id="cpSV" width="280" height="200"></canvas>
+      <canvas id="cpHue" width="280" height="28"></canvas>
+      <div id="cpPreviewRow">
+        <div id="cpPreview"></div>
+        <span id="cpHex">#ffffff</span>
+      </div>
+      <div id="cpButtons">
+        <button id="cpCancel" type="button">CANCEL</button>
+        <button id="cpOk" type="button">OK</button>
+      </div>
+    </div>
   </div>
 
   <div id="overlay">
@@ -356,7 +438,7 @@
       inputmode="text" data-lpignore="true" data-1p-ignore data-form-type="other"
       readonly onfocus="this.removeAttribute('readonly')" />
     <button id="joinBtn">JOIN THE CURD CHAOS</button>
-    <p class="hint">Drag to move · PUNCH to knock tubs loose · <span id="status"></span></p>
+    <p class="hint">Joystick to move · PUNCH to knock tubs loose · <span id="status"></span></p>
   </div>
 
   <script type="module" src="main.js"></script>

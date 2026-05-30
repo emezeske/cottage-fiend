@@ -661,6 +661,172 @@ joinBtn.onclick = () => {
 nameInput.addEventListener('input', updateJoinEnabled);
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinBtn.click(); });
 
+// --- custom HSV color picker -------------------------------------------------
+// Firefox Android's built-in <input type="color"> is a tiny preset palette,
+// not a real picker. We render our own SV plane + hue strip in canvas so every
+// browser gets the same experience. Each "swatch" is a <button> that owns its
+// hex value via a .value property and emits an 'input' CustomEvent when the
+// picker writes a new color — existing onPickerChange wiring keeps working.
+function _hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+}
+function _rgbToHex(r, g, b) {
+  const h = (n) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0');
+  return '#' + h(r) + h(g) + h(b);
+}
+function _rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d > 0) {
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return { h, s: mx === 0 ? 0 : d / mx, v: mx };
+}
+function _hsvToRgb(h, s, v) {
+  const c = v * s;
+  const hh = (h / 60) % 6;
+  const x = c * (1 - Math.abs((hh % 2) - 1));
+  let r = 0, g = 0, b = 0;
+  if (hh < 1)      { r = c; g = x; }
+  else if (hh < 2) { r = x; g = c; }
+  else if (hh < 3) { g = c; b = x; }
+  else if (hh < 4) { g = x; b = c; }
+  else if (hh < 5) { r = x; b = c; }
+  else             { r = c; b = x; }
+  const m = v - c;
+  return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 };
+}
+
+function _setSwatch(sw, hex) {
+  sw.value = hex;
+  sw.style.background = hex;
+}
+
+const colorPicker = (() => {
+  const modal     = document.getElementById('colorPickerModal');
+  const sv        = document.getElementById('cpSV');
+  const hue       = document.getElementById('cpHue');
+  const preview   = document.getElementById('cpPreview');
+  const hexLabel  = document.getElementById('cpHex');
+  const cancelBtn = document.getElementById('cpCancel');
+  const okBtn     = document.getElementById('cpOk');
+  const svCtx     = sv.getContext('2d');
+  const hueCtx    = hue.getContext('2d');
+
+  let target = null;
+  let originalHex = '#ffffff';
+  let hsv = { h: 0, s: 1, v: 1 };
+
+  function drawSV() {
+    const W = sv.width, H = sv.height;
+    const base = _hsvToRgb(hsv.h, 1, 1);
+    svCtx.fillStyle = `rgb(${base.r | 0},${base.g | 0},${base.b | 0})`;
+    svCtx.fillRect(0, 0, W, H);
+    const gx = svCtx.createLinearGradient(0, 0, W, 0);
+    gx.addColorStop(0, 'rgba(255,255,255,1)');
+    gx.addColorStop(1, 'rgba(255,255,255,0)');
+    svCtx.fillStyle = gx; svCtx.fillRect(0, 0, W, H);
+    const gy = svCtx.createLinearGradient(0, 0, 0, H);
+    gy.addColorStop(0, 'rgba(0,0,0,0)');
+    gy.addColorStop(1, 'rgba(0,0,0,1)');
+    svCtx.fillStyle = gy; svCtx.fillRect(0, 0, W, H);
+    const cx = hsv.s * W, cy = (1 - hsv.v) * H;
+    svCtx.lineWidth = 2; svCtx.strokeStyle = '#000';
+    svCtx.beginPath(); svCtx.arc(cx, cy, 8, 0, Math.PI * 2); svCtx.stroke();
+    svCtx.strokeStyle = '#fff';
+    svCtx.beginPath(); svCtx.arc(cx, cy, 7, 0, Math.PI * 2); svCtx.stroke();
+  }
+  function drawHue() {
+    const W = hue.width, H = hue.height;
+    const g = hueCtx.createLinearGradient(0, 0, W, 0);
+    for (let i = 0; i <= 6; i++) {
+      const rgb = _hsvToRgb(i * 60, 1, 1);
+      g.addColorStop(i / 6, `rgb(${rgb.r | 0},${rgb.g | 0},${rgb.b | 0})`);
+    }
+    hueCtx.fillStyle = g; hueCtx.fillRect(0, 0, W, H);
+    const x = (hsv.h / 360) * W;
+    hueCtx.lineWidth = 2; hueCtx.strokeStyle = '#000';
+    hueCtx.strokeRect(x - 5, 1, 10, H - 2);
+    hueCtx.strokeStyle = '#fff';
+    hueCtx.strokeRect(x - 4, 2, 8, H - 4);
+  }
+  function commitToTarget() {
+    const rgb = _hsvToRgb(hsv.h, hsv.s, hsv.v);
+    const hex = _rgbToHex(rgb.r, rgb.g, rgb.b);
+    preview.style.background = hex;
+    hexLabel.textContent = hex.toUpperCase();
+    if (target) {
+      _setSwatch(target, hex);
+      target.dispatchEvent(new CustomEvent('input'));   // keep onPickerChange wiring intact
+    }
+  }
+  function pointerToSV(e) {
+    const rect = sv.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    hsv.s = x / rect.width;
+    hsv.v = 1 - y / rect.height;
+    drawSV(); commitToTarget();
+  }
+  function pointerToHue(e) {
+    const rect = hue.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    hsv.h = (x / rect.width) * 360;
+    drawSV(); drawHue(); commitToTarget();
+  }
+  function bindDrag(el, handler) {
+    let active = false;
+    el.addEventListener('pointerdown', (e) => {
+      active = true;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      handler(e);
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove', (e) => { if (active) { handler(e); e.preventDefault(); } });
+    el.addEventListener('pointerup',     (e) => { active = false; try { el.releasePointerCapture(e.pointerId); } catch {} });
+    el.addEventListener('pointercancel', ()  => { active = false; });
+  }
+  bindDrag(sv, pointerToSV);
+  bindDrag(hue, pointerToHue);
+
+  cancelBtn.addEventListener('click', () => {
+    if (target) {
+      _setSwatch(target, originalHex);
+      target.dispatchEvent(new CustomEvent('input'));
+    }
+    modal.style.display = 'none';
+    target = null;
+  });
+  okBtn.addEventListener('click', () => {
+    modal.style.display = 'none';
+    target = null;
+  });
+
+  return {
+    open(swatch) {
+      target = swatch;
+      originalHex = swatch.value || '#ffffff';
+      const rgb = _hexToRgb(originalHex);
+      hsv = _rgbToHsv(rgb.r, rgb.g, rgb.b);
+      // A neutral gray has no defined hue — keep whatever hsv.h was set to
+      // (it'll be 0 from rgbToHsv) so the SV plane has a basis to draw.
+      drawSV(); drawHue(); commitToTarget();
+      modal.style.display = 'flex';
+    }
+  };
+})();
+
+// initialize each swatch from its data-color attribute and wire it to the picker
+for (const sw of [shirtColor, pantsColor, mallenColor]) {
+  _setSwatch(sw, sw.dataset.color || '#ffffff');
+  sw.addEventListener('click', () => colorPicker.open(sw));
+}
+
 // --- character customize screen ---------------------------------------------
 // Single-player preview of the south-facing sprite with live color pickers.
 // "mallen" gets one picker (the demon body color); everyone else gets two
@@ -676,10 +842,10 @@ function showCustomizeScreen(name) {
   pantsPicker.style.display = _pendingMallen ? 'none' : '';
   shirtColor.parentElement.style.display = _pendingMallen ? 'none' : '';
   mallenPicker.style.display = _pendingMallen ? '' : 'none';
-  // hydrate pickers from saved hex
-  shirtColor.value   = playerColors.shirt;
-  pantsColor.value  = playerColors.pants;
-  mallenColor.value = playerColors.mallen;
+  // hydrate pickers from saved hex (keeps swatch background in sync)
+  _setSwatch(shirtColor,  playerColors.shirt);
+  _setSwatch(pantsColor,  playerColors.pants);
+  _setSwatch(mallenColor, playerColors.mallen);
   _previewFrame = 0;
   drawPreview();
   if (_previewTimer) clearInterval(_previewTimer);
